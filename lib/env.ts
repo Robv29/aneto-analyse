@@ -14,7 +14,7 @@ export function hasSupabaseConfig() {
 
 export function getConnectorConfiguration(): ConnectorConfig[] {
   return [
-    { key: 'ausha', label: 'Ausha', configured: has(process.env.AUSHA_CLIENT_ID) && has(process.env.AUSHA_CLIENT_SECRET) },
+    { key: 'ausha', label: 'Ausha', configured: hasSupabaseConfig() && has(process.env.SUPABASE_SERVICE_ROLE_KEY) && has(process.env.ANETO_CREDENTIAL_ENCRYPTION_KEY) && has(process.env.CRON_SECRET) },
     { key: 'youtube', label: 'YouTube', configured: has(process.env.YOUTUBE_CLIENT_ID) && has(process.env.YOUTUBE_CLIENT_SECRET) },
     { key: 'instagram', label: 'Instagram', configured: has(process.env.INSTAGRAM_CLIENT_ID) && has(process.env.INSTAGRAM_CLIENT_SECRET) },
     { key: 'tiktok', label: 'TikTok', configured: has(process.env.TIKTOK_CLIENT_ID) && has(process.env.TIKTOK_CLIENT_SECRET) },
@@ -25,6 +25,9 @@ export function getRuntimeStatus() {
   return {
     application: 'ok' as const,
     database: hasSupabaseConfig() ? 'configured' as const : 'not_configured' as const,
+    jobs: has(process.env.SUPABASE_SERVICE_ROLE_KEY) && has(process.env.ANETO_CREDENTIAL_ENCRYPTION_KEY) && has(process.env.CRON_SECRET)
+      ? 'configured' as const
+      : 'not_configured' as const,
     connectors: getConnectorConfiguration(),
     checkedAt: new Date().toISOString(),
   }

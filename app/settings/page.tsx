@@ -2,12 +2,20 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getWorkspaceSnapshot } from '@/lib/data/workspace'
 import { signOut } from '@/app/login/actions'
+import { connectAusha, enqueueAushaSync } from './actions'
 
 export const dynamic = 'force-dynamic'
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; success?: string }>
+}) {
   const snapshot = await getWorkspaceSnapshot()
+  const feedback = await searchParams
   if (snapshot.mode === 'live' && !snapshot.viewer) redirect('/login')
+  const ausha = snapshot.sources.find((source) => source.provider === 'ausha')
+  const aushaReady = snapshot.connectors.find((connector) => connector.key === 'ausha')?.configured
 
   return (
     <main className="settings-page">
@@ -20,6 +28,9 @@ export default async function SettingsPage() {
         <Link href="/">Retour au produit</Link>
       </header>
 
+      {feedback.error ? <p className="settings-feedback is-error" role="alert">{feedback.error}</p> : null}
+      {feedback.success ? <p className="settings-feedback is-success" role="status">{feedback.success}</p> : null}
+
       <section className="settings-section">
         <div>
           <span>ENVIRONNEMENT</span>
@@ -29,6 +40,37 @@ export default async function SettingsPage() {
           ? `${snapshot.viewer?.displayName ?? snapshot.viewer?.email} · rôle ${snapshot.organization?.role ?? 'sans organisation'}`
           : 'Aucune donnée affichée dans le produit n’est encore issue d’un compte client.'}</p>
       </section>
+
+      {snapshot.mode === 'live' && aushaReady ? (
+        <section className="settings-section connector-control">
+          <div>
+            <span>AUSHA / PUBLIC API</span>
+            <h2>{ausha ? 'Émission connectée' : 'Connecter une émission'}</h2>
+          </div>
+          {ausha ? (
+            <div>
+              <p>Dernière synchronisation : {ausha.lastSyncedAt ? new Date(ausha.lastSyncedAt).toLocaleString('fr-FR') : 'jamais'}</p>
+              <form action={enqueueAushaSync}>
+                <input type="hidden" name="sourceId" value={ausha.id} />
+                <button type="submit">Programmer une synchronisation</button>
+              </form>
+            </div>
+          ) : (
+            <form action={connectAusha} className="auth-form">
+              <label>
+                Identifiant de l’émission
+                <input name="showId" inputMode="numeric" pattern="[0-9]+" required />
+              </label>
+              <label>
+                Jeton Public API Ausha
+                <input name="accessToken" type="password" autoComplete="off" minLength={20} required />
+              </label>
+              <small>Le jeton est vérifié auprès d’Ausha puis stocké sous forme chiffrée.</small>
+              <button type="submit">Vérifier et connecter</button>
+            </form>
+          )}
+        </section>
+      ) : null}
 
       <section className="settings-section integrations-list">
         <div>

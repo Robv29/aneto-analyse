@@ -43,3 +43,9 @@ Le Lot 1 ajoute le premier chemin multi-tenant exploitable :
 - mode démonstration explicitement signalé lorsque Supabase n’est pas configuré.
 
 Pour activer le mode connecté, appliquez les migrations `supabase/migrations` dans l’ordre, renseignez `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_ANON_KEY`, puis créez un utilisateur dans Supabase Auth. L’utilisateur est dirigé vers l’onboarding lors de sa première connexion.
+
+## Synchronisation Ausha
+
+Le connecteur utilise le jeton Public API documenté par Ausha. Un propriétaire d’organisation renseigne le jeton et l’identifiant de l’émission dans Paramètres ; le jeton est vérifié auprès d’Ausha, chiffré en AES-256-GCM puis stocké séparément des contenus.
+
+La synchronisation est idempotente, relançable et planifiée chaque nuit à 02:00 UTC. Elle respecte les réponses `429` et leur délai `Retry-After`, limite les tentatives et conserve les erreurs dans `sync_runs`. Son activation nécessite également `SUPABASE_SERVICE_ROLE_KEY`, `ANETO_CREDENTIAL_ENCRYPTION_KEY` et `CRON_SECRET`.

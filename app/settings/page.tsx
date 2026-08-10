@@ -16,6 +16,8 @@ export default async function SettingsPage({
   if (snapshot.mode === 'live' && !snapshot.viewer) redirect('/login')
   const ausha = snapshot.sources.find((source) => source.provider === 'ausha')
   const aushaReady = snapshot.connectors.find((connector) => connector.key === 'ausha')?.configured
+  const youtube = snapshot.sources.find((source) => source.provider === 'youtube')
+  const youtubeReady = snapshot.connectors.find((connector) => connector.key === 'youtube')?.configured
 
   return (
     <main className="settings-page">
@@ -68,6 +70,23 @@ export default async function SettingsPage({
               <small>Le jeton est vérifié auprès d’Ausha puis stocké sous forme chiffrée.</small>
               <button type="submit">Vérifier et connecter</button>
             </form>
+          )}
+        </section>
+      ) : null}
+
+      {snapshot.mode === 'live' && youtubeReady ? (
+        <section className="settings-section connector-control">
+          <div>
+            <span>YOUTUBE / OAUTH</span>
+            <h2>{youtube ? 'Chaîne connectée' : 'Connecter une chaîne'}</h2>
+          </div>
+          {youtube ? (
+            <p>Autorisation Google active. Les accès sont limités à la lecture des vidéos et statistiques.</p>
+          ) : (
+            <div>
+              <p>Connexion officielle Google, en lecture seule. Aneto ne peut ni publier ni supprimer de vidéo.</p>
+              <Link href="/api/oauth/youtube/start" className="connector-link">Connecter ma chaîne YouTube</Link>
+            </div>
           )}
         </section>
       ) : null}

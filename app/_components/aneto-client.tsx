@@ -1,17 +1,25 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { WorkspaceSnapshot } from '@/lib/data/workspace'
 
-export function AnetoClient() {
+declare global {
+  interface Window {
+    __ANETO_BOOTSTRAP__?: WorkspaceSnapshot
+  }
+}
+
+export function AnetoClient({ bootstrap }: { bootstrap: WorkspaceSnapshot }) {
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let active = true
+    window.__ANETO_BOOTSTRAP__ = bootstrap
     import('../../src/app.js').catch(() => {
       if (active) setFailed(true)
     })
     return () => { active = false }
-  }, [])
+  }, [bootstrap])
 
   if (failed) {
     return (

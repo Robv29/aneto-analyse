@@ -30,3 +30,16 @@ La V3 fait commencer l’expérience par ce qu’Aneto a appris pendant l’abse
 ## Fondation applicative
 
 Le Lot 0 migre le prototype vers Next.js App Router. Les modules disposent maintenant de routes partageables, d’états d’erreur et de chargement, d’un healthcheck (`/api/health`), d’un contrat Supabase multi-tenant avec RLS et d’un socle de tests/CI.
+
+## Authentification et données réelles
+
+Le Lot 1 ajoute le premier chemin multi-tenant exploitable :
+
+- connexion Supabase par e-mail et mot de passe ;
+- création atomique d’une organisation et de son propriétaire ;
+- lectures serveur isolées par organisation ;
+- paramètres et déconnexion ;
+- décisions, contenus, sources et mémoire chargés depuis Supabase ;
+- mode démonstration explicitement signalé lorsque Supabase n’est pas configuré.
+
+Pour activer le mode connecté, appliquez les migrations `supabase/migrations` dans l’ordre, renseignez `NEXT_PUBLIC_SUPABASE_URL` et `NEXT_PUBLIC_SUPABASE_ANON_KEY`, puis créez un utilisateur dans Supabase Auth. L’utilisateur est dirigé vers l’onboarding lors de sa première connexion.

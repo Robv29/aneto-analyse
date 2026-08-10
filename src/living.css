@@ -1,0 +1,128 @@
+/* V3 — behavioural layer: one accent, mathematical rhythm, living intelligence. */
+:root{
+  --muted:#92978c;
+  --soft:#b6baaf;
+  --rail:62px;
+  --ease-out:cubic-bezier(.16,1,.3,1);
+}
+
+.rail{width:var(--rail);padding:20px 10px}
+.content{margin-left:var(--rail)}
+.logo{width:29px;height:29px;margin-bottom:48px}
+.rail nav{gap:8px}
+.rail-button{width:38px;height:38px}
+.rail-button svg{width:17px;height:17px}
+.rail-button.active:before{left:-10px}
+.rail-button span{left:46px}
+
+.today,.page{padding-left:clamp(24px,6vw,96px);padding-right:clamp(24px,6vw,96px)}
+.today{padding-top:24px}
+.minimal-head>span,.page-head>div>span,.drawer-label,.section-label span{color:#7d8278}
+.brain-status,.daily-title>span,.section-label em{color:#8a8f84}
+.intent{padding:96px 0}
+.intent>p{color:#b0b4aa;margin-bottom:24px}
+.intent h1{line-height:.93;letter-spacing:-4.5px}
+.intent h1 em{color:var(--text)}
+
+.overnight-insight{display:grid;grid-template-columns:125px 1fr auto;gap:24px;align-items:center;width:min(760px,100%);margin-top:48px;padding:17px 0;border-top:1px solid #242720;border-bottom:1px solid #242720}
+.overnight-insight>span{font:500 8px 'DM Mono';letter-spacing:1.3px;color:var(--lime)}
+.overnight-insight p{font-size:11px;line-height:1.5;color:#b1b5ab;margin:0}
+.overnight-insight button{border:0;background:transparent;color:#b9bdb3;font-size:9px;display:flex;align-items:center;gap:8px;cursor:pointer}
+
+.intent-input{height:46px;margin-top:24px;width:min(580px,100%);border-color:#292c25;background:#121310;padding-left:16px;border-radius:8px;box-shadow:none}
+.goal-list{margin-top:8px;gap:6px}
+.goal-list button{padding:7px 10px;border-color:transparent;background:#11120f;color:#898e83}
+.goal-list button:hover{border-color:#2e312a}
+
+.daily-title{margin-bottom:0}
+.recommendations{border-top-color:#2b2e27}
+.rec{padding:17px 0;border-bottom-color:#242720}
+.rec:hover{padding-left:8px}
+.rec-icon{background:transparent;color:#d9dbd3!important}
+.rec:first-child .rec-icon{color:var(--lime)!important}
+.rec-copy small{color:#7c8176}
+.rec-copy em,.rec-ready{color:#92978c}
+.quiet-footer{margin-top:24px;color:#73786e}
+
+.page{padding-top:48px}
+.page-head{margin-bottom:48px}
+.page-head h1{line-height:.94}
+.learning i,.scan-orbit>i{background:#cfd2ca;box-shadow:none}
+.learning strong{color:#f1f0e9;font-size:17px}
+.prediction{padding-top:24px}
+.prediction-label{color:#8d9287}
+.answer-probability{border:0;padding:24px 0 0;display:flex;align-items:baseline;gap:20px}
+.answer-probability strong{font-size:72px;line-height:1;color:var(--lime)}
+.answer-probability strong span{font-size:28px}
+.answer-probability small{font-size:9px;line-height:1.5;margin:0;color:#9aa095}
+.prediction-main{grid-template-columns:1fr;padding:24px 0 48px}
+.prediction h2{line-height:.94;letter-spacing:-2.4px}
+.prediction-main p{display:none}
+.prediction-reason p{color:#969b90}
+.prediction-reason>span{color:#d9dbd3}
+.prediction-reason button,.node-inspector button,.validate,.workflow-footer button{background:#ecece5;color:#10110e}
+.dna{padding:48px 0}
+.dna-trait em{color:#e2e3dc;font-size:13px}
+.evidence-line p,.node-inspector>p,.memory-event p,.research-note p{color:#8f9489}
+
+.graph-stage{background:radial-gradient(circle at 50% 48%,rgba(255,255,255,.025),transparent 27%),radial-gradient(#242620 1px,transparent 1px);background-size:auto,26px 26px}
+.graph-stage>.node-inspector svg{width:15px;height:15px}
+.connection{stroke:#3c4037;stroke-width:1.15;stroke-dasharray:4 7;animation:link-breathe 7s ease-in-out infinite}
+.connection.active{stroke:#c9d3aa}
+.signal-dot{fill:#d6d9d0}
+.knowledge-particle{fill:#f0f1e9;opacity:.55;filter:url(#glow)}
+.node circle{animation:node-breathe 8s ease-in-out infinite;transform-origin:center}
+.node:nth-of-type(3n) circle{animation-delay:-2.5s;animation-duration:10s}
+.node:nth-of-type(4n) circle{animation-delay:-5s;animation-duration:12s}
+.node.person circle{stroke:#8e9780;filter:url(#glow)}
+.node:hover circle,.node.selected circle{stroke:#d9dbd3;fill:#1d2119}
+.node-kind{color:#d9dbd3}
+
+.timeline-line{width:2px;background:#34382f}
+.memory-event>i{width:10px;height:10px}
+.memory-event>i.learn{background:#e2e4dc;box-shadow:0 0 0 4px rgba(255,255,255,.045)}
+.memory-event em{color:#d8dad2;border-color:#44483e}
+.memory-count strong{font-size:40px;color:#f0f0e9}
+.memory-count span{color:#8e9388}
+
+.scan-orbit>i{animation:soft-pulse 4s ease-in-out infinite}
+.scan-sources{color:#8e9388}
+.opportunity{padding:19px 0;border-top-color:#262922}
+.opportunity b{color:#dfe1d9;font-size:12px}
+.signal-arrival{animation:signal-arrival .65s var(--ease-out) both}
+.research-note{color:#d9dbd3}
+
+.story-number{letter-spacing:-1px}
+.drawer-label,.workflow-panel header span{color:#dfe1d9}
+.prepared-block>svg,.workflow-step.working>i{color:#e4e6de;background:#e4e6de}
+.validate.validated{background:#292d25;color:#e8e9e2}
+
+@keyframes link-breathe{0%,100%{stroke-opacity:.42}50%{stroke-opacity:.82}}
+@keyframes node-breathe{0%,100%{transform:scale(1);stroke-opacity:.72}50%{transform:scale(1.018);stroke-opacity:1}}
+@keyframes soft-pulse{0%,100%{opacity:.4;box-shadow:0 0 0 4px rgba(255,255,255,.02)}50%{opacity:1;box-shadow:0 0 0 9px rgba(255,255,255,0)}}
+@keyframes signal-arrival{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
+
+@media(max-width:800px){
+  .overnight-insight{grid-template-columns:1fr auto;gap:8px}
+  .overnight-insight>span{grid-column:1/-1}
+}
+@media(max-width:600px){
+  :root{--rail:52px}
+  .intent{padding:72px 0}
+  .intent h1{font-size:42px;letter-spacing:-2.7px}
+  .overnight-insight{margin-top:48px}
+  .answer-probability strong{font-size:60px}
+}
+@media(prefers-reduced-motion:reduce){
+  .connection,.node circle,.scan-orbit>i,.signal-arrival{animation:none!important}
+  .knowledge-particle{display:none}
+}
+
+.system-state{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:24px;max-width:760px;margin:0 auto;padding:48px;color:var(--text);background:var(--bg)}
+.system-state>span{font:500 9px 'DM Mono';letter-spacing:1.4px;color:#8a8f84}
+.system-state h1{font-size:clamp(36px,6vw,72px);line-height:.94;letter-spacing:-3px;font-weight:500;margin:0}
+.system-state p{max-width:520px;color:#92978c;line-height:1.6;margin:0}
+.system-state button,.system-state a{border:0;border-radius:8px;background:#ecece5;color:#10110e;padding:12px 16px;font-size:10px;font-weight:700;text-decoration:none;cursor:pointer}
+.system-progress{width:min(420px,100%);height:2px;background:#252821;overflow:hidden}
+.system-progress:after{content:"";display:block;width:38%;height:100%;background:#ecece5;animation:system-loading 1.4s ease-in-out infinite}
+@keyframes system-loading{from{transform:translateX(-100%)}to{transform:translateX(360%)}}

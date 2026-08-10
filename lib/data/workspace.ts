@@ -52,8 +52,9 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
   if (!supabase) return emptySnapshot()
 
   const { data: authData, error: authError } = await supabase.auth.getUser()
-  if (authError) throw new Error(`Session Supabase invalide: ${authError.message}`)
-  if (!authData.user) return { ...emptySnapshot(), mode: 'live' }
+  // Expired or legacy browser cookies are an unauthenticated state, not an
+  // application incident. The login flow will replace them with a valid session.
+  if (authError || !authData.user) return { ...emptySnapshot(), mode: 'live' }
 
   const user = authData.user
   const [{ data: profile, error: profileError }, { data: membership, error: membershipError }] = await Promise.all([

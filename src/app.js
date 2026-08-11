@@ -23,6 +23,8 @@ const icons = {
   dots:'<circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/>'
 }
 const icon = (name,size=19) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[character])
+const compactNumber = (value) => Number.isFinite(Number(value)) ? new Intl.NumberFormat('fr-FR', { notation:'compact', maximumFractionDigits:1 }).format(Number(value)) : '—'
 
 const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini', syncing:false, syncMessage:null, syncTone:null }
 
@@ -87,9 +89,20 @@ function today() {
     <div class="sync-command-meta"><span>${latestSync ? `Dernière mise à jour · ${new Date(latestSync).toLocaleString('fr-FR')}` : 'Aucune synchronisation terminée'}</span><span>Les données restent en lecture seule</span></div>
     ${state.syncMessage ? `<p class="sync-feedback ${state.syncTone==='success'?'is-success':'is-error'}" role="status">${state.syncMessage}</p>` : ''}
   </section>` : ''
+  const syncedLibrary = !isDemo && bootstrap.contentItems.length ? `<section class="synced-library">
+    <div class="synced-library-head"><div><span>CONTENUS SYNCHRONISÉS</span><h2>La matière est là.</h2></div><p>${bootstrap.contentItems.length} contenu${bootstrap.contentItems.length>1?'s':''} récent${bootstrap.contentItems.length>1?'s':''}</p></div>
+    <div class="synced-content-list">${bootstrap.contentItems.slice(0, 8).map((item,index) => {
+      const isVideo = item.provider === 'youtube' || item.kind === 'video'
+      const metric = isVideo ? item.payload?.viewCount : item.payload?.downloadsCount
+      const label = isVideo ? 'vues' : 'écoutes'
+      const href = isVideo ? `https://www.youtube.com/watch?v=${encodeURIComponent(item.externalId)}` : null
+      const row = `<span class="synced-content-index">${String(index+1).padStart(2,'0')}</span><span class="synced-content-copy"><small>${isVideo?'YOUTUBE · VIDÉO':'AUSHA · ÉPISODE'}${item.publishedAt?` · ${new Date(item.publishedAt).toLocaleDateString('fr-FR')}`:''}</small><strong>${escapeHtml(item.title)}</strong></span><span class="synced-content-metric"><b>${compactNumber(metric)}</b><small>${label}</small></span>${icon(href?'arrow':'check',17)}`
+      return href ? `<a href="${href}" target="_blank" rel="noreferrer">${row}</a>` : `<article>${row}</article>`
+    }).join('')}</div>
+  </section>` : !isDemo ? '<section class="synced-library is-empty"><div><span>CONTENUS SYNCHRONISÉS</span><h2>En attente du premier contenu.</h2></div><p>Lance la synchronisation globale juste au-dessus.</p></section>' : ''
   const goals = isDemo ? `<button class="intent-input" id="intent-input"><span>Décris ton objectif…</span><kbd>⌘ K</kbd></button><div class="goal-list">${Object.keys(workflows).map((w,i)=>`<button data-workflow="${w}"><span>0${i+1}</span>${w}${icon('arrow',15)}</button>`).join('')}</div>` : '<div class="module-empty"><strong>Les workflows arrivent avec le moteur de jobs.</strong><p>Aucune action fictive ne sera proposée dans un espace connecté.</p></div>'
   const recommendationList = recommendations.length ? recommendations.map((r,i)=>`<button class="rec" data-detail="${i}"><span class="rec-icon ${r.tone}">${r.icon}</span><span class="rec-copy"><small>${r.type}</small><strong>${r.title}</strong><em>${r.note}</em></span><span class="rec-ready">${r.action}</span>${icon('arrow',17)}</button>`).join('') : '<div class="module-empty"><strong>Aucune décision pour le moment.</strong><p>Les recommandations apparaîtront après la première synchronisation.</p></div>'
-  return `<div class="today page-enter"><header class="minimal-head"><span>ANETO / AUJOURD’HUI</span><div class="brain-status"><i></i>${isDemo?'Le cerveau a appris 128 nouvelles choses cette nuit':`${bootstrap.memoryEvents.length} événements chargés depuis la mémoire`}</div></header>${syncButton}<section class="intent"><p>Bonjour${firstName ? ` ${firstName}` : ''}.</p><h1>Que veux-tu accomplir<br><em>aujourd’hui ?</em></h1>${goals}</section><section class="daily"><div class="daily-title"><p>AUJOURD’HUI, JE RECOMMANDE</p><span>${recommendations.length} décision${recommendations.length>1?'s':''}</span></div><div class="recommendations">${recommendationList}</div></section><footer class="quiet-footer"><span>Rien ne sera publié sans ton accord.</span><button data-view="memory">Ce qu’Aneto a appris ${icon('arrow',14)}</button></footer></div>`
+  return `<div class="today page-enter"><header class="minimal-head"><span>ANETO / AUJOURD’HUI</span><div class="brain-status"><i></i>${isDemo?'Le cerveau a appris 128 nouvelles choses cette nuit':`${bootstrap.memoryEvents.length} événements chargés depuis la mémoire`}</div></header>${syncButton}${syncedLibrary}<section class="intent"><p>Bonjour${firstName ? ` ${firstName}` : ''}.</p><h1>Que veux-tu accomplir<br><em>aujourd’hui ?</em></h1>${goals}</section><section class="daily"><div class="daily-title"><p>AUJOURD’HUI, JE RECOMMANDE</p><span>${recommendations.length} décision${recommendations.length>1?'s':''}</span></div><div class="recommendations">${recommendationList}</div></section><footer class="quiet-footer"><span>Rien ne sera publié sans ton accord.</span><button data-view="memory">Ce qu’Aneto a appris ${icon('arrow',14)}</button></footer></div>`
 }
 
 async function syncAllSources() {
@@ -110,6 +123,7 @@ async function syncAllSources() {
       if (source.state === 'connected') source.lastSyncedAt = result.syncedAt
     })
     render()
+    window.setTimeout(() => window.location.reload(), 700)
   } catch (error) {
     state.syncing = false
     state.syncMessage = error instanceof Error ? error.message : 'La synchronisation n’a pas pu démarrer.'

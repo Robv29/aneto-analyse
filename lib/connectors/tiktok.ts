@@ -148,16 +148,18 @@ export class TikTokClient {
   }
 
   async getUser() {
-    const fields = 'open_id,union_id,avatar_url,display_name,profile_deep_link,bio_description'
+    // Keep this request inside user.info.basic. profile_deep_link and
+    // bio_description require the separate user.info.profile scope.
+    const fields = 'open_id,display_name'
     const payload = await this.request<{
-      data?: { user?: { open_id?: string; display_name?: string; profile_deep_link?: string } }
+      data?: { user?: { open_id?: string; display_name?: string } }
     }>(`/user/info/?fields=${fields}`)
     const user = payload.data?.user
     if (!user?.open_id) throw new ConnectorError('Le compte TikTok autorisé est introuvable.', 'account_unavailable')
     return {
       id: user.open_id,
       displayName: user.display_name?.trim() || 'Compte TikTok',
-      profileUrl: user.profile_deep_link ?? null,
+      profileUrl: null,
     }
   }
 

@@ -18,6 +18,7 @@ export default async function SettingsPage({
   const aushaReady = snapshot.connectors.find((connector) => connector.key === 'ausha')?.configured
   const youtube = snapshot.sources.find((source) => source.provider === 'youtube')
   const youtubeReady = snapshot.connectors.find((connector) => connector.key === 'youtube')?.configured
+  const youtubeTranscriptionReady = youtube?.oauthScopes.includes('https://www.googleapis.com/auth/youtube.force-ssl')
 
   return (
     <main className="settings-page">
@@ -83,15 +84,21 @@ export default async function SettingsPage({
           {youtube ? (
             <div>
               <p>Dernière synchronisation : {youtube.lastSyncedAt ? new Date(youtube.lastSyncedAt).toLocaleString('fr-FR') : 'jamais'}</p>
+              <p className={youtubeTranscriptionReady ? 'connector-capability is-ready' : 'connector-capability'}>
+                {youtubeTranscriptionReady
+                  ? 'Transcription autorisée · Aneto peut lire les pistes de sous-titres de tes vidéos.'
+                  : 'Transcription non autorisée · renouvelle l’accès Google pour importer les sous-titres.'}
+              </p>
               <form action={syncYouTubeNow}>
                 <input type="hidden" name="sourceId" value={youtube.id} />
                 <button type="submit">Synchroniser les vidéos maintenant</button>
               </form>
-              <Link href="/api/oauth/youtube/start" className="connector-link">Renouveler l’autorisation YouTube</Link>
+              <Link href="/api/oauth/youtube/start" className="connector-link">{youtubeTranscriptionReady ? 'Renouveler l’autorisation YouTube' : 'Autoriser les transcriptions'}</Link>
+              <small>Google regroupe la lecture des sous-titres dans une permission au libellé étendu. Aneto effectue uniquement des appels de lecture et ne modifie aucune vidéo.</small>
             </div>
           ) : (
             <div>
-              <p>Connexion officielle Google, en lecture seule. Aneto ne peut ni publier ni supprimer de vidéo.</p>
+              <p>Connexion officielle Google. Aneto lit les vidéos, statistiques et pistes de sous-titres, sans publier ni supprimer de contenu.</p>
               <Link href="/api/oauth/youtube/start" className="connector-link">Connecter ma chaîne YouTube</Link>
             </div>
           )}

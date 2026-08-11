@@ -1,6 +1,27 @@
 const stringOrNull = (value) => typeof value === 'string' && value.length ? value : null
 const countOrNull = (value) => /^\d+$/.test(String(value ?? '')) ? Number(value) : null
 
+export function plainTextFromVtt(vtt) {
+  const lines = String(vtt ?? '').replace(/^\uFEFF/, '').split(/\r?\n/)
+  const output = []
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line || line === 'WEBVTT' || line.startsWith('NOTE') || line.includes('-->') || /^\d+$/.test(line)) continue
+    const clean = line
+      .replace(/<\/?[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (clean && output.at(-1) !== clean) output.push(clean)
+  }
+  return output.join('\n')
+}
+
 export function normalizeYouTubeVideo(input, observedAt = new Date().toISOString()) {
   if (!input || typeof input.id !== 'string' || !input.id) throw new TypeError('YouTube video id is required')
   if (typeof input.snippet?.title !== 'string' || !input.snippet.title.trim()) {

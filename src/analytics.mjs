@@ -5,6 +5,19 @@ const stopWords = new Set([
 
 const finiteNumber = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
 
+export function extractTranscriptKeywords(text, limit = 12) {
+  const frequencies = new Map()
+  String(text ?? '').split(/[^\p{L}\p{N}]+/u).forEach((raw) => {
+    const word = raw.trim()
+    const key = word.toLocaleLowerCase('fr-FR')
+    if (key.length < 4 || stopWords.has(key) || /^\d+$/.test(key)) return
+    const current = frequencies.get(key) ?? { label: key, count: 0 }
+    current.count += 1
+    frequencies.set(key, current)
+  })
+  return [...frequencies.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'fr')).slice(0, limit).map((entry) => entry.label)
+}
+
 export function primaryMetric(item) {
   return item?.provider === 'youtube' || item?.kind === 'video'
     ? finiteNumber(item?.payload?.viewCount)
@@ -31,7 +44,8 @@ export function extractTopics(items, limit = 6) {
   }
 
   items.forEach((item) => {
-    const tags = Array.isArray(item?.payload?.tags) ? item.payload.tags : []
+    const transcriptKeywords = Array.isArray(item?.transcript?.keywords) ? item.transcript.keywords : []
+    const tags = transcriptKeywords.length ? transcriptKeywords : (Array.isArray(item?.payload?.tags) ? item.payload.tags : [])
     if (tags.length) tags.slice(0, 12).forEach(add)
     else String(item?.title ?? '').split(/[^\p{L}\p{N}]+/u).forEach(add)
   })

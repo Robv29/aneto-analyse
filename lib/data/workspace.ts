@@ -10,6 +10,7 @@ export type WorkspaceSnapshot = {
     provider: string
     state: string
     lastSyncedAt: string | null
+    oauthScopes: string[]
   }>
   contentItems: Array<{
     id: string
@@ -19,6 +20,7 @@ export type WorkspaceSnapshot = {
     title: string
     publishedAt: string | null
     payload: Record<string, unknown>
+    transcript: null | { status: string; language: string | null; wordCount: number; keywords: string[] }
   }>
   decisions: Array<{
     id: string
@@ -81,15 +83,16 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
   if (!membership) return base
 
   const organizationId = membership.organization_id
-  const [organizationResult, sourcesResult, contentResult, decisionsResult, memoryResult] = await Promise.all([
+  const [organizationResult, sourcesResult, contentResult, decisionsResult, memoryResult, transcriptsResult] = await Promise.all([
     supabase.from('organizations').select('id, name, slug').eq('id', organizationId).single(),
-    supabase.from('sources').select('id, provider, state, last_synced_at').eq('organization_id', organizationId).order('created_at'),
+    supabase.from('sources').select('id, provider, state, last_synced_at, oauth_scopes').eq('organization_id', organizationId).order('created_at'),
     supabase.from('content_items').select('id, source_id, kind, external_id, title, published_at, payload').eq('organization_id', organizationId).order('published_at', { ascending: false }).limit(500),
     supabase.from('decisions').select('id, title, rationale, status, confidence, created_at').eq('organization_id', organizationId).order('created_at', { ascending: false }).limit(12),
     supabase.from('memory_events').select('id, event_type, source, confidence, observed_at, impact').eq('organization_id', organizationId).order('observed_at', { ascending: false }).limit(30),
+    supabase.from('content_transcripts').select('content_item_id, status, language, word_count, keywords').eq('organization_id', organizationId),
   ])
 
-  const firstError = [organizationResult.error, sourcesResult.error, contentResult.error, decisionsResult.error, memoryResult.error].find(Boolean)
+  const firstError = [organizationResult.error, sourcesResult.error, contentResult.error, decisionsResult.error, memoryResult.error, transcriptsResult.error].find(Boolean)
   if (firstError) throw new Error(`Chargement de l’espace impossible: ${firstError.message}`)
   const organization = organizationResult.data
   if (!organization) throw new Error('Organisation introuvable malgré une adhésion active.')
@@ -107,6 +110,7 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
       provider: source.provider,
       state: source.state,
       lastSyncedAt: source.last_synced_at,
+      oauthScopes: source.oauth_scopes ?? [],
     })),
     contentItems: (contentResult.data ?? []).map((item) => ({
       id: item.id,
@@ -116,6 +120,10 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
       title: item.title,
       publishedAt: item.published_at,
       payload: (item.payload ?? {}) as Record<string, unknown>,
+      transcript: (() => {
+        const transcript = transcriptsResult.data?.find((entry) => entry.content_item_id === item.id)
+        return transcript ? { status: transcript.status, language: transcript.language, wordCount: transcript.word_count ?? 0, keywords: transcript.keywords ?? [] } : null
+      })(),
     })),
     decisions: (decisionsResult.data ?? []).map((decision) => ({
       id: decision.id,

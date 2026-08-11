@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeYouTubeVideo } from '../src/connectors/youtube.mjs'
+import { normalizeYouTubeVideo, plainTextFromVtt } from '../src/connectors/youtube.mjs'
 
 test('normalizes a YouTube video and its public statistics', () => {
   const item = normalizeYouTubeVideo({
@@ -28,4 +28,19 @@ test('normalizes a YouTube video and its public statistics', () => {
 test('rejects malformed YouTube videos', () => {
   assert.throws(() => normalizeYouTubeVideo({ snippet: { title: 'Missing id' } }), /id is required/)
   assert.throws(() => normalizeYouTubeVideo({ id: 'video-1', snippet: {} }), /title is required/)
+})
+
+test('converts YouTube VTT captions into readable transcript text', () => {
+  const transcript = plainTextFromVtt(`WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+<c>Bonjour &amp; bienvenue.</c>
+
+00:00:02.000 --> 00:00:04.000
+Bonjour &amp; bienvenue.
+
+00:00:04.000 --> 00:00:06.000
+Voici la suite.`)
+
+  assert.equal(transcript, 'Bonjour & bienvenue.\nVoici la suite.')
 })

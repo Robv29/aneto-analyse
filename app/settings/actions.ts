@@ -127,7 +127,7 @@ export async function syncYouTubeNow(formData: FormData) {
   revalidatePath('/settings')
   revalidatePath('/')
   if (result.status === 'succeeded') {
-    redirect(settingsUrl('success', `${result.items} vidéo${result.items > 1 ? 's' : ''} synchronisée${result.items > 1 ? 's' : ''}.`))
+    redirect(settingsUrl('success', `${result.items} vidéo${result.items > 1 ? 's' : ''} synchronisée${result.items > 1 ? 's' : ''} · ${result.transcripts} transcription${result.transcripts > 1 ? 's' : ''} importée${result.transcripts > 1 ? 's' : ''}.`))
   }
   redirect(settingsUrl('error', 'La synchronisation YouTube est en attente ou doit être relancée.'))
 }

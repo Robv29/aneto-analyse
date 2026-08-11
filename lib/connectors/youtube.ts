@@ -1,6 +1,6 @@
 import { ConnectorError } from './types'
 import type { NormalizedContentItem } from './types'
-import { normalizeYouTubeVideo } from '@/src/connectors/youtube.mjs'
+import { normalizeYouTubeVideo, plainTextFromVtt } from '@/src/connectors/youtube.mjs'
 
 const GOOGLE_OAUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -8,8 +8,11 @@ const YOUTUBE_API_URL = 'https://www.googleapis.com/youtube/v3'
 
 const scopes = [
   'https://www.googleapis.com/auth/youtube.readonly',
+  'https://www.googleapis.com/auth/youtube.force-ssl',
   'https://www.googleapis.com/auth/yt-analytics.readonly',
 ]
+
+export const YOUTUBE_CAPTIONS_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl'
 
 export type YouTubeTokens = {
   accessToken: string
@@ -37,6 +40,31 @@ type YouTubePlaylistResponse = {
 type YouTubeVideosResponse = {
   items?: unknown[]
   error?: { message?: string }
+}
+
+type YouTubeCaptionsResponse = {
+  items?: Array<{
+    id?: string
+    snippet?: {
+      language?: string
+      name?: string
+      trackKind?: string
+      isDraft?: boolean
+      isAutoSynced?: boolean
+      status?: string
+      lastUpdated?: string
+    }
+  }>
+  error?: { message?: string }
+}
+
+export type YouTubeTranscript = {
+  status: 'available' | 'unavailable'
+  text: string | null
+  language: string | null
+  trackKind: string | null
+  captionTrackId: string | null
+  lastUpdated: string | null
 }
 
 export function getYouTubeRedirectUri() {
@@ -176,6 +204,22 @@ export class YouTubeClient {
     return payload
   }
 
+  private async requestText(path: string): Promise<string> {
+    const response = await fetch(`${YOUTUBE_API_URL}${path}`, {
+      headers: { Authorization: `Bearer ${this.accessToken}`, Accept: 'text/vtt' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
+    })
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new ConnectorError('Google n’autorise pas encore la lecture des sous-titres.', 'captions_unauthorized')
+      }
+      if (response.status === 429) throw new ConnectorError('Quota YouTube atteint.', 'rate_limited', 3600)
+      throw new ConnectorError(`YouTube a répondu avec le statut ${response.status}.`, 'upstream_error')
+    }
+    return response.text()
+  }
+
   async listVideos(channelId: string): Promise<NormalizedContentItem[]> {
     const channel = await this.request<YouTubeChannelResponse>('/channels?part=id,snippet,contentDetails&mine=true')
     const current = channel.items?.find((item) => item.id === channelId) ?? channel.items?.[0]
@@ -206,5 +250,35 @@ export class YouTubeClient {
       for (const video of page.items ?? []) items.push(normalizeYouTubeVideo(video, observedAt) as NormalizedContentItem)
     }
     return items
+  }
+
+  async getTranscript(videoId: string): Promise<YouTubeTranscript> {
+    const params = new URLSearchParams({ part: 'id,snippet', videoId })
+    const captions = await this.request<YouTubeCaptionsResponse>(`/captions?${params}`)
+    const tracks = (captions.items ?? []).filter((track) => track.id && track.snippet?.status !== 'failed')
+    if (!tracks.length) {
+      return { status: 'unavailable', text: null, language: null, trackKind: null, captionTrackId: null, lastUpdated: null }
+    }
+
+    const score = (track: (typeof tracks)[number]) => {
+      const language = track.snippet?.language?.toLowerCase() ?? ''
+      return (language === 'fr' || language.startsWith('fr-') ? 100 : 0)
+        + (track.snippet?.trackKind === 'standard' ? 20 : 0)
+        + (track.snippet?.isDraft ? 0 : 5)
+    }
+    const track = [...tracks].sort((a, b) => score(b) - score(a))[0]
+    const vtt = await this.requestText(`/captions/${encodeURIComponent(track.id!)}?tfmt=vtt`)
+    const text = plainTextFromVtt(vtt)
+    if (!text) {
+      return { status: 'unavailable', text: null, language: track.snippet?.language ?? null, trackKind: track.snippet?.trackKind ?? null, captionTrackId: track.id ?? null, lastUpdated: track.snippet?.lastUpdated ?? null }
+    }
+    return {
+      status: 'available',
+      text,
+      language: track.snippet?.language ?? null,
+      trackKind: track.snippet?.trackKind ?? null,
+      captionTrackId: track.id ?? null,
+      lastUpdated: track.snippet?.lastUpdated ?? null,
+    }
   }
 }

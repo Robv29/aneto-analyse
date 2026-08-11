@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { analyzeContent, extractTopics, parseDurationSeconds, primaryMetric } from '../src/analytics.mjs'
+import { analyzeContent, extractTopics, extractTranscriptKeywords, parseDurationSeconds, primaryMetric } from '../src/analytics.mjs'
 
 const videos = [
   { kind: 'video', provider: 'youtube', title: 'Créer une marque forte', payload: { viewCount: 1200, likeCount: 90, commentCount: 15, duration: 'PT12M30S', tags: ['Marque', 'Entrepreneuriat'] } },
@@ -29,4 +29,8 @@ test('aggregates real performance statistics', () => {
   assert.equal(analysis.averageDurationSeconds, 600)
   assert.equal(analysis.engagementRate, 8)
   assert.equal(analysis.top.title, 'Créer une marque forte')
+})
+
+test('extracts semantic keywords from a stored transcript', () => {
+  assert.deepEqual(extractTranscriptKeywords('Média média stratégie. Une stratégie éditoriale pour le média.', 3), ['média', 'stratégie', 'éditoriale'])
 })

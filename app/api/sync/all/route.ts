@@ -50,6 +50,8 @@ export async function POST(request: Request) {
 
   const pendingRunIds = new Set(queuedRuns.map((run) => run.id))
   let items = 0
+  let transcripts = 0
+  let transcriptsPending = 0
   let failed = 0
   const maxClaims = Math.max(12, pendingRunIds.size * 5)
 
@@ -60,6 +62,8 @@ export async function POST(request: Request) {
 
     if (result.status === 'succeeded') {
       items += result.items
+      transcripts += result.transcripts
+      transcriptsPending += result.transcriptsPending
       pendingRunIds.delete(result.runId)
     } else if (result.status === 'failed') {
       failed += 1
@@ -81,9 +85,11 @@ export async function POST(request: Request) {
     pending: pendingRunIds.size,
     failed,
     items,
+    transcripts,
+    transcriptsPending,
     syncedAt: new Date().toISOString(),
     message: partial
       ? `${completed} source${completed > 1 ? 's' : ''} traitée${completed > 1 ? 's' : ''}. Le reste continue en arrière-plan.`
-      : `${queuedRuns.length} source${queuedRuns.length > 1 ? 's' : ''} synchronisée${queuedRuns.length > 1 ? 's' : ''} · ${items} contenu${items > 1 ? 's' : ''} à jour.`,
+      : `${queuedRuns.length} source${queuedRuns.length > 1 ? 's' : ''} synchronisée${queuedRuns.length > 1 ? 's' : ''} · ${items} contenu${items > 1 ? 's' : ''} à jour · ${transcripts} transcription${transcripts > 1 ? 's' : ''} importée${transcripts > 1 ? 's' : ''}.`,
   })
 }

@@ -1,9 +1,10 @@
 import 'server-only'
 import { AushaClient } from '@/lib/connectors/ausha'
-import { refreshYouTubeTokens, YouTubeClient, type YouTubeTokens } from '@/lib/connectors/youtube'
+import { refreshYouTubeTokens, YouTubeClient, YOUTUBE_CAPTIONS_SCOPE, type YouTubeTokens } from '@/lib/connectors/youtube'
 import { ConnectorError } from '@/lib/connectors/types'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { decryptCredential, encryptCredential } from '@/src/security/credentials.mjs'
+import { extractTranscriptKeywords } from '@/src/analytics.mjs'
 
 type ClaimedRun = {
   id: string
@@ -66,6 +67,8 @@ export async function processNextSyncRun() {
     let items
     let kind: 'episode' | 'video'
     let provenanceEndpoint: string
+    let youtubeClient: YouTubeClient | null = null
+    let youtubeScopes = ''
 
     if (source.provider === 'ausha') {
       items = await new AushaClient(storedCredential).listEpisodes(source.external_account_id)
@@ -80,7 +83,9 @@ export async function processNextSyncRun() {
       }
       if (!tokens.refreshToken) throw new ConnectorError('Autorisation YouTube incomplète.', 'invalid_credentials')
       const refreshed = await refreshYouTubeTokens(tokens)
-      items = await new YouTubeClient(refreshed.accessToken).listVideos(source.external_account_id)
+      youtubeClient = new YouTubeClient(refreshed.accessToken)
+      youtubeScopes = refreshed.scope
+      items = await youtubeClient.listVideos(source.external_account_id)
       kind = 'video'
       provenanceEndpoint = '/youtube/v3/playlistItems + /youtube/v3/videos'
 
@@ -116,20 +121,98 @@ export async function processNextSyncRun() {
       updated_at: syncedAt,
     }))
 
+    let persistedItems: Array<{ id: string; external_id: string }> = []
     if (rows.length) {
-      const { error: upsertError } = await admin.from('content_items').upsert(rows, {
+      const { data: upsertedItems, error: upsertError } = await admin.from('content_items').upsert(rows, {
         onConflict: 'organization_id,source_id,external_id',
-      })
+      }).select('id, external_id')
       if (upsertError) throw upsertError
+      persistedItems = upsertedItems ?? []
+    }
+
+    let transcriptsAvailable = 0
+    let transcriptsPending = 0
+    if (source.provider === 'youtube' && youtubeClient && persistedItems.length) {
+      const hasCaptionsScope = youtubeScopes.split(/\s+/).includes(YOUTUBE_CAPTIONS_SCOPE)
+      const { data: existingTranscripts } = await admin
+        .from('content_transcripts')
+        .select('content_item_id, status, updated_at')
+        .eq('organization_id', source.organization_id)
+
+      const existingByContent = new Map((existingTranscripts ?? []).map((transcript) => [transcript.content_item_id, transcript]))
+      if (!hasCaptionsScope) {
+        const transcriptRows = persistedItems.map((item) => ({
+          organization_id: source.organization_id,
+          content_item_id: item.id,
+          source: 'youtube_captions',
+          status: 'authorization_required',
+          plain_text: null,
+          word_count: 0,
+          keywords: [],
+          provenance: { provider: 'youtube', reason: 'missing_captions_scope' },
+          updated_at: syncedAt,
+        }))
+        const { error: transcriptError } = await admin.from('content_transcripts').upsert(transcriptRows, { onConflict: 'content_item_id' })
+        if (!transcriptError) transcriptsPending = transcriptRows.length
+      } else {
+        const staleUnavailable = Date.now() - 7 * 24 * 60 * 60 * 1000
+        const candidates = persistedItems.filter((item) => {
+          const transcript = existingByContent.get(item.id)
+          if (!transcript || transcript.status === 'authorization_required' || transcript.status === 'error') return true
+          return transcript.status === 'unavailable' && new Date(transcript.updated_at).getTime() < staleUnavailable
+        }).slice(0, 12)
+
+        const transcriptRows = await Promise.all(candidates.map(async (item) => {
+          try {
+            const transcript = await youtubeClient!.getTranscript(item.external_id)
+            return {
+              organization_id: source.organization_id,
+              content_item_id: item.id,
+              source: 'youtube_captions',
+              status: transcript.status,
+              language: transcript.language,
+              track_kind: transcript.trackKind,
+              caption_track_id: transcript.captionTrackId,
+              plain_text: transcript.text,
+              word_count: transcript.text ? transcript.text.split(/\s+/).filter(Boolean).length : 0,
+              keywords: transcript.text ? extractTranscriptKeywords(transcript.text) : [],
+              provenance: { provider: 'youtube', endpoint: '/youtube/v3/captions', caption_last_updated: transcript.lastUpdated },
+              updated_at: syncedAt,
+            }
+          } catch (error) {
+            return {
+              organization_id: source.organization_id,
+              content_item_id: item.id,
+              source: 'youtube_captions',
+              status: error instanceof ConnectorError && error.code === 'captions_unauthorized' ? 'authorization_required' : 'error',
+              language: null,
+              track_kind: null,
+              caption_track_id: null,
+              plain_text: null,
+              word_count: 0,
+              keywords: [],
+              provenance: { provider: 'youtube', error: safeMessage(error) },
+              updated_at: syncedAt,
+            }
+          }
+        }))
+        if (transcriptRows.length) {
+          const { error: transcriptError } = await admin.from('content_transcripts').upsert(transcriptRows, { onConflict: 'content_item_id' })
+          if (!transcriptError) {
+            transcriptsAvailable = transcriptRows.filter((row) => row.status === 'available').length
+            transcriptsPending = transcriptRows.filter((row) => row.status !== 'available').length
+          }
+        }
+      }
     }
 
     await Promise.all([
       admin.from('sources').update({ state: 'connected', last_synced_at: syncedAt, updated_at: syncedAt }).eq('id', source.id),
       admin.from('sync_runs').update({
-        status: 'succeeded', finished_at: syncedAt, metrics: { items: rows.length }, error_code: null, error_message: null,
+        status: 'succeeded', finished_at: syncedAt, metrics: { items: rows.length, transcripts_available: transcriptsAvailable, transcripts_pending: transcriptsPending }, error_code: null, error_message: null,
       }).eq('id', run.id),
     ])
-    return { status: 'succeeded' as const, runId: run.id, items: rows.length }
+    return { status: 'succeeded' as const, runId: run.id, items: rows.length, transcripts: transcriptsAvailable, transcriptsPending }
   } catch (error) {
     const retryAfter = error instanceof ConnectorError ? error.retryAfterSeconds : null
     const shouldRetry = run.attempt < 3 && !(error instanceof ConnectorError && error.code === 'unauthorized')

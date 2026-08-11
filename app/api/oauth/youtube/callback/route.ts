@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
       provider: 'youtube',
       external_account_id: channel.id,
       state: 'connected',
+      oauth_scopes: tokens.scope.split(/\s+/).filter(Boolean),
       updated_at: now,
     }, { onConflict: 'organization_id,provider,external_account_id' }).select('id').single()
     if (sourceError || !source) throw new Error('source_write_failed')

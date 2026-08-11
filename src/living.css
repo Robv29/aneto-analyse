@@ -24,6 +24,26 @@
 .intent h1{line-height:.93;letter-spacing:-4.5px}
 .intent h1 em{color:var(--text)}
 
+.sync-command{margin-top:36px;border-top:1px solid #34382f;border-bottom:1px solid #242720;padding:18px 0 16px;display:grid;grid-template-columns:minmax(150px,.48fr) minmax(360px,1.52fr);gap:14px 30px;align-items:stretch}
+.sync-command-copy{display:flex;flex-direction:column;justify-content:center;gap:8px}
+.sync-command-copy span{font:500 8px 'DM Mono';letter-spacing:1.35px;color:var(--lime)}
+.sync-command-copy p{margin:0;color:#8e9388;font-size:11px;line-height:1.5}
+.sync-command>button{min-height:92px;border:0;border-radius:10px;background:var(--lime);color:#0b0d09;display:grid;grid-template-columns:52px 1fr auto;grid-template-rows:1fr 1fr;column-gap:18px;align-items:center;padding:18px 22px;text-align:left;cursor:pointer;box-shadow:0 18px 55px rgba(0,0,0,.24);transition:transform .25s var(--ease-out),box-shadow .25s var(--ease-out),background .25s}
+.sync-command>button:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 24px 65px rgba(0,0,0,.34),0 0 0 1px rgba(216,255,67,.22)}
+.sync-command>button:active:not(:disabled){transform:translateY(0)}
+.sync-command>button:focus-visible{outline:2px solid #fff;outline-offset:4px}
+.sync-command>button:disabled{cursor:wait;opacity:.74}
+.sync-command-icon{grid-row:1/3;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:rgba(11,13,9,.1)}
+.sync-command>button strong{align-self:end;font-size:18px;letter-spacing:-.35px}
+.sync-command>button small{align-self:start;margin-top:4px;font:500 8px 'DM Mono';opacity:.62}
+.sync-command>button>svg{grid-column:3;grid-row:1/3;transition:transform .25s var(--ease-out)}
+.sync-command>button:hover:not(:disabled)>svg{transform:translateX(4px)}
+.sync-command.is-syncing .sync-command-icon svg{animation:sync-spin 1.15s linear infinite}
+.sync-command-meta{grid-column:2;display:flex;justify-content:space-between;color:#666b61;font:400 8px 'DM Mono'}
+.sync-feedback{grid-column:2;margin:0;padding-top:2px;font:500 9px/1.5 'DM Mono'}
+.sync-feedback.is-success{color:var(--lime)}
+.sync-feedback.is-error{color:#ff928b}
+
 .overnight-insight{display:grid;grid-template-columns:125px 1fr auto;gap:24px;align-items:center;width:min(760px,100%);margin-top:48px;padding:17px 0;border-top:1px solid #242720;border-bottom:1px solid #242720}
 .overnight-insight>span{font:500 8px 'DM Mono';letter-spacing:1.3px;color:var(--lime)}
 .overnight-insight p{font-size:11px;line-height:1.5;color:#b1b5ab;margin:0}
@@ -101,20 +121,29 @@
 @keyframes node-breathe{0%,100%{transform:scale(1);stroke-opacity:.72}50%{transform:scale(1.018);stroke-opacity:1}}
 @keyframes soft-pulse{0%,100%{opacity:.4;box-shadow:0 0 0 4px rgba(255,255,255,.02)}50%{opacity:1;box-shadow:0 0 0 9px rgba(255,255,255,0)}}
 @keyframes signal-arrival{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
+@keyframes sync-spin{to{transform:rotate(360deg)}}
 
 @media(max-width:800px){
+  .sync-command{grid-template-columns:1fr}
+  .sync-command>button,.sync-command-meta,.sync-feedback{grid-column:1}
   .overnight-insight{grid-template-columns:1fr auto;gap:8px}
   .overnight-insight>span{grid-column:1/-1}
 }
 @media(max-width:600px){
   :root{--rail:52px}
   .intent{padding:72px 0}
+  .sync-command{margin-top:24px;padding-top:14px;gap:12px}
+  .sync-command>button{min-height:84px;grid-template-columns:44px 1fr auto;padding:14px 15px;column-gap:12px}
+  .sync-command-icon{width:44px;height:44px}
+  .sync-command>button strong{font-size:15px}
+  .sync-command-meta{display:block;line-height:1.7}
+  .sync-command-meta span:last-child{display:none}
   .intent h1{font-size:42px;letter-spacing:-2.7px}
   .overnight-insight{margin-top:48px}
   .answer-probability strong{font-size:60px}
 }
 @media(prefers-reduced-motion:reduce){
-  .connection,.node circle,.scan-orbit>i,.signal-arrival{animation:none!important}
+  .connection,.node circle,.scan-orbit>i,.signal-arrival,.sync-command-icon svg{animation:none!important}
   .knowledge-particle{display:none}
 }
 

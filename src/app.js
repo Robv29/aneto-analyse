@@ -19,11 +19,12 @@ const icons = {
   play:'<path d="m9 6 10 6-10 6Z"/>',
   up:'<path d="m6 14 6-6 6 6"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
+  sync:'<path d="M20 7h-5V2"/><path d="m20 2-3.6 3.6A8 8 0 1 0 20 12"/>',
   dots:'<circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/>'
 }
 const icon = (name,size=19) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`
 
-const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini' }
+const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini', syncing:false, syncMessage:null, syncTone:null }
 
 const demoRecommendations = [
   {type:'PRIORITÉ', icon:'↗', tone:'lime', title:'Republier Thomas Fantini', note:'Une conversation de 2023 vient de redevenir pertinente.', confidence:'94 %', action:'Republication préparée', detail:'Le sujet « management de crise » progresse de 31 % cette semaine. L’épisode contient un passage jamais publié sur la décision à 160 000 €.'},
@@ -72,9 +73,49 @@ function shell(content) {
 
 function today() {
   const firstName = bootstrap.viewer?.displayName?.split(' ')[0] || (isDemo ? 'Robin' : '')
+  const connectedSources = bootstrap.sources.filter(source => source.state === 'connected')
+  const latestSync = connectedSources.map(source => source.lastSyncedAt).filter(Boolean).sort().at(-1)
+  const sourceLabels = connectedSources.map(source => source.provider === 'youtube' ? 'YouTube' : source.provider === 'ausha' ? 'Ausha' : source.provider)
+  const syncButton = !isDemo ? `<section class="sync-command ${state.syncing?'is-syncing':''}">
+    <div class="sync-command-copy"><span>MISE À JOUR GLOBALE</span><p>${sourceLabels.length ? sourceLabels.join(' + ') : 'Connecte une première source dans les paramètres.'}</p></div>
+    <button id="sync-all" type="button" ${state.syncing || !connectedSources.length ? 'disabled' : ''}>
+      <span class="sync-command-icon">${icon('sync',26)}</span>
+      <strong>${state.syncing ? 'Synchronisation en cours…' : 'Tout synchroniser'}</strong>
+      <small>${state.syncing ? 'Aneto interroge toutes tes plateformes' : connectedSources.length ? `${connectedSources.length} source${connectedSources.length>1?'s':''} en un seul clic` : 'Aucune source connectée'}</small>
+      ${icon('arrow',20)}
+    </button>
+    <div class="sync-command-meta"><span>${latestSync ? `Dernière mise à jour · ${new Date(latestSync).toLocaleString('fr-FR')}` : 'Aucune synchronisation terminée'}</span><span>Les données restent en lecture seule</span></div>
+    ${state.syncMessage ? `<p class="sync-feedback ${state.syncTone==='success'?'is-success':'is-error'}" role="status">${state.syncMessage}</p>` : ''}
+  </section>` : ''
   const goals = isDemo ? `<button class="intent-input" id="intent-input"><span>Décris ton objectif…</span><kbd>⌘ K</kbd></button><div class="goal-list">${Object.keys(workflows).map((w,i)=>`<button data-workflow="${w}"><span>0${i+1}</span>${w}${icon('arrow',15)}</button>`).join('')}</div>` : '<div class="module-empty"><strong>Les workflows arrivent avec le moteur de jobs.</strong><p>Aucune action fictive ne sera proposée dans un espace connecté.</p></div>'
   const recommendationList = recommendations.length ? recommendations.map((r,i)=>`<button class="rec" data-detail="${i}"><span class="rec-icon ${r.tone}">${r.icon}</span><span class="rec-copy"><small>${r.type}</small><strong>${r.title}</strong><em>${r.note}</em></span><span class="rec-ready">${r.action}</span>${icon('arrow',17)}</button>`).join('') : '<div class="module-empty"><strong>Aucune décision pour le moment.</strong><p>Les recommandations apparaîtront après la première synchronisation.</p></div>'
-  return `<div class="today page-enter"><header class="minimal-head"><span>ANETO / AUJOURD’HUI</span><div class="brain-status"><i></i>${isDemo?'Le cerveau a appris 128 nouvelles choses cette nuit':`${bootstrap.memoryEvents.length} événements chargés depuis la mémoire`}</div></header><section class="intent"><p>Bonjour${firstName ? ` ${firstName}` : ''}.</p><h1>Que veux-tu accomplir<br><em>aujourd’hui ?</em></h1>${goals}</section><section class="daily"><div class="daily-title"><p>AUJOURD’HUI, JE RECOMMANDE</p><span>${recommendations.length} décision${recommendations.length>1?'s':''}</span></div><div class="recommendations">${recommendationList}</div></section><footer class="quiet-footer"><span>Rien ne sera publié sans ton accord.</span><button data-view="memory">Ce qu’Aneto a appris ${icon('arrow',14)}</button></footer></div>`
+  return `<div class="today page-enter"><header class="minimal-head"><span>ANETO / AUJOURD’HUI</span><div class="brain-status"><i></i>${isDemo?'Le cerveau a appris 128 nouvelles choses cette nuit':`${bootstrap.memoryEvents.length} événements chargés depuis la mémoire`}</div></header>${syncButton}<section class="intent"><p>Bonjour${firstName ? ` ${firstName}` : ''}.</p><h1>Que veux-tu accomplir<br><em>aujourd’hui ?</em></h1>${goals}</section><section class="daily"><div class="daily-title"><p>AUJOURD’HUI, JE RECOMMANDE</p><span>${recommendations.length} décision${recommendations.length>1?'s':''}</span></div><div class="recommendations">${recommendationList}</div></section><footer class="quiet-footer"><span>Rien ne sera publié sans ton accord.</span><button data-view="memory">Ce qu’Aneto a appris ${icon('arrow',14)}</button></footer></div>`
+}
+
+async function syncAllSources() {
+  state.syncing = true
+  state.syncMessage = null
+  state.syncTone = null
+  render()
+
+  try {
+    const response = await fetch('/api/sync/all', { method: 'POST' })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || 'La synchronisation n’a pas pu démarrer.')
+
+    state.syncing = false
+    state.syncMessage = result.message
+    state.syncTone = result.status === 'succeeded' ? 'success' : 'error'
+    if (result.syncedAt) bootstrap.sources.forEach(source => {
+      if (source.state === 'connected') source.lastSyncedAt = result.syncedAt
+    })
+    render()
+  } catch (error) {
+    state.syncing = false
+    state.syncMessage = error instanceof Error ? error.message : 'La synchronisation n’a pas pu démarrer.'
+    state.syncTone = 'error'
+    render()
+  }
 }
 
 function intelligence() {
@@ -212,6 +253,7 @@ function bind() {
   document.querySelectorAll('[data-node]').forEach(n=>{n.onclick=()=>{state.selectedNode=n.dataset.node;render()};n.onkeydown=e=>{if(e.key==='Enter'){state.selectedNode=n.dataset.node;render()}}})
   document.querySelector('#intent-input')?.addEventListener('click',commandPalette)
   document.querySelector('#global-search')?.addEventListener('click',commandPalette)
+  document.querySelector('#sync-all')?.addEventListener('click',syncAllSources)
   document.querySelector('#prepare-episode')?.addEventListener('click',()=>{state.workflow='Créer un épisode';state.prepared=false;render()})
   document.querySelector('#prepare-workflow')?.addEventListener('click',()=>{state.prepared=true;render()})
   document.querySelector('#validate-action')?.addEventListener('click',e=>{e.currentTarget.innerHTML=`${icon('check',16)} Planifié pour mardi à 08:15`;e.currentTarget.classList.add('validated')})

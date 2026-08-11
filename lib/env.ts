@@ -39,6 +39,11 @@ export function getRuntimeStatus() {
     jobs: has(process.env.SUPABASE_SERVICE_ROLE_KEY) && hasValidCredentialEncryptionKey() && has(process.env.CRON_SECRET)
       ? 'configured' as const
       : 'not_configured' as const,
+    intelligence: {
+      provider: 'openrouter' as const,
+      status: has(process.env.OPENROUTER_API_KEY) ? 'configured' as const : 'not_configured' as const,
+      model: has(process.env.OPENROUTER_MODEL) ? process.env.OPENROUTER_MODEL : 'openrouter/free',
+    },
     connectors: getConnectorConfiguration(),
     checkedAt: new Date().toISOString(),
   }

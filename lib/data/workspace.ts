@@ -13,6 +13,9 @@ export type ClipCandidate = {
   retention: null | { audienceWatchRatio: number; relativeRetentionPerformance: number }
   title: string
   hook: string
+  publicationHook: string
+  rationale: string | null
+  aiEnhanced: boolean
   excerpt: string
   reasons: string[]
 }
@@ -42,6 +45,8 @@ export type WorkspaceSnapshot = {
       wordCount: number
       keywords: string[]
       timed: boolean
+      aiEnhanced: boolean
+      aiModel: string | null
       clips: ClipCandidate[]
     }
   }>
@@ -147,18 +152,41 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
         const transcript = transcriptsResult.data?.find((entry) => entry.content_item_id === item.id)
         const segments = Array.isArray(transcript?.provenance?.timed_segments) ? transcript.provenance.timed_segments : []
         const retentionPoints = Array.isArray(transcript?.provenance?.retention_points) ? transcript.provenance.retention_points : []
+        const aiClips: Array<{ candidateId?: string; title?: string; publicationHook?: string; rationale?: string }> = Array.isArray(transcript?.provenance?.ai_clips) ? transcript.provenance.ai_clips : []
+        const measuredClips = buildClipCandidates(segments, {
+          videoId: item.external_id,
+          limit: 8,
+          retentionPoints,
+          durationSeconds: parseDurationSeconds({ payload: item.payload }),
+        })
+        const measuredById = new Map(measuredClips.map((clip) => [clip.id, clip]))
+        const enrichedClips = aiClips.flatMap((aiClip) => {
+          if (!aiClip.candidateId) return []
+          const measured = measuredById.get(aiClip.candidateId)
+          if (!measured) return []
+          return [{
+            ...measured,
+            title: aiClip.title || measured.title,
+            publicationHook: aiClip.publicationHook || measured.hook,
+            rationale: aiClip.rationale || null,
+            aiEnhanced: true,
+          }]
+        })
+        const remainingClips = measuredClips.filter((clip) => !enrichedClips.some((enriched: { id: string }) => enriched.id === clip.id)).map((clip) => ({
+          ...clip,
+          publicationHook: clip.hook,
+          rationale: null,
+          aiEnhanced: false,
+        }))
         return transcript ? {
           status: transcript.status,
           language: transcript.language,
           wordCount: transcript.word_count ?? 0,
           keywords: transcript.keywords ?? [],
           timed: segments.length > 0,
-          clips: buildClipCandidates(segments, {
-            videoId: item.external_id,
-            limit: 3,
-            retentionPoints,
-            durationSeconds: parseDurationSeconds({ payload: item.payload }),
-          }),
+          aiEnhanced: enrichedClips.length > 0,
+          aiModel: typeof transcript.provenance?.ai_model === 'string' ? transcript.provenance.ai_model : null,
+          clips: [...enrichedClips, ...remainingClips].slice(0, 3),
         } : null
       })(),
     })),

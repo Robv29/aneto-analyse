@@ -40,8 +40,9 @@ const transcriptCount = bootstrap.contentItems.filter(item => item.transcript?.s
 const timedTranscriptCount = bootstrap.contentItems.filter(item => item.transcript?.timed).length
 const clipCandidates = bootstrap.contentItems.flatMap(item => (item.transcript?.clips ?? []).map(clip => ({ ...clip, item })))
   .sort((a,b) => b.score - a.score || primaryMetric(b.item) - primaryMetric(a.item))
+const aiClipCount = clipCandidates.filter(clip => clip.aiEnhanced).length
 
-const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini', syncing:false, syncMessage:null, syncTone:null, committingDecision:false, decisionMessage:null, currentDecision:null }
+const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini', syncing:false, syncMessage:null, syncTone:null, committingDecision:false, decisionMessage:null, currentDecision:null, enrichingClips:false, clipAiMessage:null, clipAiTone:null }
 
 const demoRecommendations = [
   {type:'PRIORITÉ', icon:'↗', tone:'lime', title:'Republier Thomas Fantini', note:'Une conversation de 2023 vient de redevenir pertinente.', confidence:'94 %', action:'Republication préparée', detail:'Le sujet « management de crise » progresse de 31 % cette semaine. L’épisode contient un passage jamais publié sur la décision à 160 000 €.'},
@@ -255,13 +256,37 @@ function clips() {
   return `<div class="page clips-page page-enter">
     <header class="page-head clips-head"><div><span>STUDIO / DÉRUSHAGE</span><h1>Extraits</h1></div><div class="clips-counter"><strong>${demoClips.length}</strong><span>cuts<br>à examiner</span></div></header>
     <section class="clips-manifesto"><span>ANETO A DÉJÀ DÉRUSHÉ</span><h2>Tu ne cherches plus dans les vidéos.<br>Tu choisis quoi publier.</h2><p>Chaque cut part d’un passage réellement prononcé. Le classement croise tension, fait concret, expérience vécue et durée adaptée${retainedCount ? ` avec les pics de rétention YouTube sur ${retainedCount} proposition${retainedCount>1?'s':''}` : ''}. Ce score aide à trier : il ne promet jamais un nombre de vues.</p></section>
+    ${!isDemo ? `<section class="ai-editorial ${state.enrichingClips?'is-working':''}"><div class="ai-editorial-mark">${icon('spark',20)}</div><div><small>OPENROUTER / DIRECTION ÉDITORIALE</small><strong>${aiClipCount ? `${aiClipCount} proposition${aiClipCount>1?'s':''} déjà enrichie${aiClipCount>1?'s':''}` : 'Les passages sont prêts pour une seconde lecture éditoriale.'}</strong><p>L’IA améliore le titre et le hook de publication. Elle ne peut modifier ni la citation, ni le cut, ni le timecode.</p>${state.clipAiMessage?`<em class="${state.clipAiTone==='error'?'is-error':''}" role="status">${escapeHtml(state.clipAiMessage)}</em>`:''}</div><button id="enrich-clips" ${state.enrichingClips?'disabled':''}>${state.enrichingClips?'Analyse en cours…':aiClipCount?'Analyser les suivantes':'Améliorer avec OpenRouter'} ${icon(state.enrichingClips?'sync':'arrow',15)}</button></section>` : ''}
     <section class="clip-table"><div class="section-label"><span>SHORTS À PRÉPARER</span><em>Classés par force éditoriale du texte</em></div>${demoClips.slice(0,18).map((clip,index)=>clipCard(clip,index)).join('')}</section>
   </div>`
 }
 
 function clipCard(clip,index) {
   const watchUrl = clip.item.externalId === 'demo' ? '#' : `https://www.youtube.com/watch?v=${encodeURIComponent(clip.item.externalId)}&t=${clip.start}s`
-  return `<article class="clip-card"><div class="clip-rank"><span>${String(index+1).padStart(2,'0')}</span><strong>${clip.score}</strong><small>SCORE<br>DE CUT</small></div><div class="clip-source"><small>VIDÉO SOURCE</small><strong>${escapeHtml(clip.item.title)}</strong><span>${formatClipTime(clip.start)} → ${formatClipTime(clip.end)} · ${clip.duration} sec</span>${clip.retention?`<em>Rétention relative · ${Math.round(clip.retention.relativeRetentionPerformance*100)}/100</em>`:'<em>Classement sémantique · rétention à importer</em>'}</div><div class="clip-proposal"><small>TITRE PROPOSÉ</small><h2>${escapeHtml(clip.title)}</h2><div class="clip-hook"><span>HOOK</span><p>« ${escapeHtml(clip.hook)} »</p></div><blockquote>${escapeHtml(clip.excerpt)}</blockquote><div class="clip-reasons">${clip.reasons.map(reason=>`<span>${escapeHtml(reason)}</span>`).join('')}</div></div><div class="clip-actions">${clip.item.externalId==='demo'?'<button data-workflow="Créer 10 Shorts">Préparer le short</button>':`<a href="${watchUrl}" target="_blank" rel="noreferrer">Voir au bon moment ${icon('play',14)}</a><a class="secondary-link" href="/transcripts/${encodeURIComponent(clip.item.id)}">Lire la transcription ${icon('arrow',13)}</a>`}</div></article>`
+  return `<article class="clip-card ${clip.aiEnhanced?'is-ai':''}"><div class="clip-rank"><span>${String(index+1).padStart(2,'0')}</span><strong>${clip.score}</strong><small>SCORE<br>DE CUT</small></div><div class="clip-source"><small>VIDÉO SOURCE</small><strong>${escapeHtml(clip.item.title)}</strong><span>${formatClipTime(clip.start)} → ${formatClipTime(clip.end)} · ${clip.duration} sec</span>${clip.retention?`<em>Rétention relative · ${Math.round(clip.retention.relativeRetentionPerformance*100)}/100</em>`:'<em>Classement sémantique · rétention à importer</em>'}</div><div class="clip-proposal"><small>${clip.aiEnhanced?'TITRE OPENROUTER':'TITRE PROPOSÉ'}</small><h2>${escapeHtml(clip.title)}</h2><div class="clip-hook"><span>${clip.aiEnhanced?'HOOK IA':'HOOK'}</span><p>${escapeHtml(clip.publicationHook ?? clip.hook)}</p></div>${clip.rationale?`<p class="clip-ai-rationale">${icon('spark',12)} ${escapeHtml(clip.rationale)}</p>`:''}<blockquote><small>PASSAGE RÉELLEMENT PRONONCÉ</small>${escapeHtml(clip.excerpt)}</blockquote><div class="clip-reasons">${clip.reasons.map(reason=>`<span>${escapeHtml(reason)}</span>`).join('')}</div></div><div class="clip-actions">${clip.item.externalId==='demo'?'<button data-workflow="Créer 10 Shorts">Préparer le short</button>':`<a href="${watchUrl}" target="_blank" rel="noreferrer">Voir au bon moment ${icon('play',14)}</a><a class="secondary-link" href="/transcripts/${encodeURIComponent(clip.item.id)}">Lire la transcription ${icon('arrow',13)}</a>`}</div></article>`
+}
+
+async function enrichClipsWithAi() {
+  if (state.enrichingClips) return
+  state.enrichingClips = true
+  state.clipAiMessage = null
+  state.clipAiTone = null
+  render()
+  try {
+    const response = await fetch('/api/clips/enrich', { method:'POST' })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || 'OpenRouter n’a pas pu analyser les extraits.')
+    state.enrichingClips = false
+    state.clipAiMessage = result.message
+    state.clipAiTone = 'success'
+    render()
+    window.setTimeout(()=>window.location.reload(),700)
+  } catch (error) {
+    state.enrichingClips = false
+    state.clipAiMessage = error instanceof Error ? error.message : 'OpenRouter n’a pas pu analyser les extraits.'
+    state.clipAiTone = 'error'
+    render()
+  }
 }
 
 async function commitCurrentDecision() {
@@ -451,6 +476,7 @@ function bind() {
   document.querySelector('#global-search')?.addEventListener('click',commandPalette)
   document.querySelector('#sync-all')?.addEventListener('click',syncAllSources)
   document.querySelector('#sync-from-clips')?.addEventListener('click',syncAllSources)
+  document.querySelector('#enrich-clips')?.addEventListener('click',enrichClipsWithAi)
   document.querySelector('#commit-decision')?.addEventListener('click',commitCurrentDecision)
   document.querySelector('#prepare-episode')?.addEventListener('click',()=>{state.workflow='Créer un épisode';state.prepared=false;render()})
   document.querySelector('#prepare-workflow')?.addEventListener('click',()=>{state.prepared=true;render()})

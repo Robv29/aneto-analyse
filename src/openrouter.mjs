@@ -52,7 +52,7 @@ export function validateOpenRouterEditorial(payload, allowedIds) {
     if (!allowed.has(candidateId) || seen.has(candidateId) || title.length < 5 || publicationHook.length < 8 || rationale.length < 12 || marketAngle.length < 12 || caption.length < 20 || targetAudience.length < 5 || hashtags.length < 3) return []
     seen.add(candidateId)
     return [{ candidateId, title, publicationHook, rationale, marketAngle, caption, targetAudience, hashtags, platformFit, rank: index + 1 }]
-  }).slice(0, 8)
+  }).slice(0, 6)
 }
 
 export function buildClipCopyText(clip) {

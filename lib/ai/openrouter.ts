@@ -57,12 +57,12 @@ export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new Error('openrouter_not_configured')
 
-  const candidatePayload = videos.flatMap((video) => video.candidates.slice(0, 5).map((candidate) => ({
+  const candidatePayload = videos.flatMap((video) => video.candidates.slice(0, 4).map((candidate) => ({
     candidate_id: candidate.id,
     video: video.title,
     publication: video.publishedAt,
     performance_video: { vues: video.views, likes: video.likes, commentaires: video.comments },
-    tags_source: video.tags.slice(0, 12),
+    tags_source: video.tags.slice(0, 8),
     timecode_secondes: { debut: candidate.start, fin: candidate.end },
     score_mesure: candidate.score,
     raisons_mesurees: candidate.reasons,
@@ -82,7 +82,7 @@ export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
     body: JSON.stringify({
       model: requestedModel,
       temperature: .25,
-      max_tokens: 3000,
+      max_tokens: 2200,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -104,8 +104,8 @@ Règles absolues :
 ${JSON.stringify(candidatePayload)}
 
 Travail demandé :
-1. Réalise une micro-étude du marché éditorial interne : thèmes qui semblent attirer l’audience, audience à viser, espace de différenciation d’Aneto, et signal à tester. Appuie-toi uniquement sur titres, tags, performances et transcriptions fournis.
-2. Mets tous les passages en concurrence. Garde au maximum 8 extraits, seulement si leur valeur est forte et distincte.
+1. Réalise une micro-étude du marché éditorial interne en une phrase précise par rubrique : thèmes qui semblent attirer l’audience, audience à viser, espace de différenciation d’Aneto, et signal à tester. Appuie-toi uniquement sur titres, tags, performances et transcriptions fournis.
+2. Mets tous les passages en concurrence. Garde au maximum 6 extraits, seulement si leur valeur est forte et distincte.
 3. Pour chaque extrait retenu, livre un véritable kit de publication :
    - candidate_id : identifiant exact fourni ;
    - title : titre net, spécifique, 70 caractères maximum, sans putaclic ;
@@ -113,7 +113,7 @@ Travail demandé :
    - rationale : raison concrète de couper ce passage plutôt qu’un autre ;
    - market_angle : tension, question ou territoire éditorial qui lui donne une place sur le marché ;
    - target_audience : personne précise à qui le publier ;
-   - caption : texte prêt à publier en français, concis, fidèle au passage, avec une question finale naturelle ;
+   - caption : texte prêt à publier en français, 400 caractères maximum, fidèle au passage, avec une question finale naturelle ;
    - hashtags : 5 à 8 hashtags ciblés et cohérents, écrits avec # ;
    - platform_fit : plateformes les plus adaptées parmi YouTube Shorts, Instagram Reels, TikTok.
 
@@ -123,7 +123,7 @@ Format obligatoire :
       ],
     }),
     cache: 'no-store',
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(150_000),
   })
   const payload = await response.json() as OpenRouterPayload
   if (!response.ok) throw new Error(payload.error?.message ?? `openrouter_${response.status}`)

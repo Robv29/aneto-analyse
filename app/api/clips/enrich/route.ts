@@ -6,6 +6,8 @@ import { buildClipCandidates } from '@/src/clips.mjs'
 import { parseDurationSeconds } from '@/src/analytics.mjs'
 import { enrichEditorialClips, isOpenRouterConfigured } from '@/lib/ai/openrouter'
 
+export const maxDuration = 180
+
 export async function POST(request: Request) {
   const requestOrigin = request.headers.get('origin')
   const requestHost = request.headers.get('host')
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
     const provenance = transcript.provenance ?? {}
     const candidates = buildClipCandidates(provenance.timed_segments, {
       videoId: content.external_id,
-      limit: 5,
+      limit: 4,
       retentionPoints: Array.isArray(provenance.retention_points) ? provenance.retention_points : [],
       durationSeconds: parseDurationSeconds({ payload: content.payload }),
     })

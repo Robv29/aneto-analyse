@@ -1,4 +1,5 @@
 import { pathForView, viewForPath } from './navigation.mjs'
+import { analyzeContent, primaryMetric } from './analytics.mjs'
 
 const bootstrap = window.__ANETO_BOOTSTRAP__ || {
   mode: 'demo', viewer: null, organization: null, sources: [], contentItems: [], decisions: [], memoryEvents: [], connectors: [],
@@ -25,6 +26,9 @@ const icons = {
 const icon = (name,size=19) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[character])
 const compactNumber = (value) => Number.isFinite(Number(value)) ? new Intl.NumberFormat('fr-FR', { notation:'compact', maximumFractionDigits:1 }).format(Number(value)) : '—'
+const formatDuration = (seconds) => seconds ? `${Math.floor(seconds/60)} min${seconds%60 ? ` ${seconds%60}s` : ''}` : '—'
+const metricLabel = (item) => item?.kind === 'video' ? 'vues' : 'écoutes'
+const analysis = analyzeContent(bootstrap.contentItems)
 
 const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini', syncing:false, syncMessage:null, syncTone:null }
 
@@ -35,7 +39,7 @@ const demoRecommendations = [
   {type:'SIGNAL', icon:'⌁', tone:'gold', title:'Le mot-clé « restaurant » progresse', note:'+42 % dans votre audience et la presse spécialisée.', confidence:'86 %', action:'Recherche enrichie', detail:'Le signal est confirmé sur YouTube, Google Trends et 214 commentaires récents. Trois invités sont liés à cette opportunité.'}
 ]
 
-const recommendations = isDemo ? demoRecommendations : bootstrap.decisions.map((decision) => ({
+const persistedRecommendations = bootstrap.decisions.map((decision) => ({
   type: 'DÉCISION',
   icon: decision.status === 'accepted' ? '✓' : '↗',
   tone: decision.status === 'accepted' ? 'lime' : 'blue',
@@ -44,7 +48,23 @@ const recommendations = isDemo ? demoRecommendations : bootstrap.decisions.map((
   confidence: decision.confidence === null ? '—' : `${Math.round(decision.confidence * 100)} %`,
   action: decision.status,
   detail: decision.rationale,
+  origin: 'persisted',
 }))
+
+const derivedRecommendations = analysis.count ? [
+  {
+    type:'PERFORMANCE', icon:'↗', tone:'lime', title:`Capitaliser sur « ${analysis.top.title} »`,
+    note:`C’est le contenu le plus performant parmi les ${analysis.count} éléments synchronisés.`, confidence:'Donnée réelle', action:`${compactNumber(primaryMetric(analysis.top))} ${metricLabel(analysis.top)}`,
+    detail:`Ce contenu domine actuellement la bibliothèque avec ${new Intl.NumberFormat('fr-FR').format(primaryMetric(analysis.top))} ${metricLabel(analysis.top)}. La recommandation est calculée uniquement à partir des données synchronisées.`, origin:'derived',
+  },
+  ...(analysis.totalComments ? [{
+    type:'CONVERSATION', icon:'⌁', tone:'blue', title:`Prolonger la conversation autour de « ${[...analysis.ranked].sort((a,b)=>(Number(b.payload?.commentCount)||0)-(Number(a.payload?.commentCount)||0))[0].title} »`,
+    note:`${analysis.totalComments} commentaires mesurés sur la bibliothèque YouTube.`, confidence:'Donnée réelle', action:'Signal détecté',
+    detail:'Ce contenu concentre la conversation la plus active dans les données actuellement disponibles.', origin:'derived',
+  }] : []),
+] : []
+
+const recommendations = isDemo ? demoRecommendations : (persistedRecommendations.length ? persistedRecommendations : derivedRecommendations)
 
 const workflows = {
   'Créer un épisode': ['Définir l’angle à partir de Media DNA','Identifier 5 invités compatibles','Préparer la trame et les questions','Créer le plan de diffusion'],
@@ -101,7 +121,7 @@ function today() {
     }).join('')}</div>
   </section>` : !isDemo ? '<section class="synced-library is-empty"><div><span>CONTENUS SYNCHRONISÉS</span><h2>En attente du premier contenu.</h2></div><p>Lance la synchronisation globale juste au-dessus.</p></section>' : ''
   const goals = isDemo ? `<button class="intent-input" id="intent-input"><span>Décris ton objectif…</span><kbd>⌘ K</kbd></button><div class="goal-list">${Object.keys(workflows).map((w,i)=>`<button data-workflow="${w}"><span>0${i+1}</span>${w}${icon('arrow',15)}</button>`).join('')}</div>` : '<div class="module-empty"><strong>Les workflows arrivent avec le moteur de jobs.</strong><p>Aucune action fictive ne sera proposée dans un espace connecté.</p></div>'
-  const recommendationList = recommendations.length ? recommendations.map((r,i)=>`<button class="rec" data-detail="${i}"><span class="rec-icon ${r.tone}">${r.icon}</span><span class="rec-copy"><small>${r.type}</small><strong>${r.title}</strong><em>${r.note}</em></span><span class="rec-ready">${r.action}</span>${icon('arrow',17)}</button>`).join('') : '<div class="module-empty"><strong>Aucune décision pour le moment.</strong><p>Les recommandations apparaîtront après la première synchronisation.</p></div>'
+  const recommendationList = recommendations.length ? recommendations.map((r,i)=>`<button class="rec" data-detail="${i}"><span class="rec-icon ${r.tone}">${r.icon}</span><span class="rec-copy"><small>${escapeHtml(r.type)}</small><strong>${escapeHtml(r.title)}</strong><em>${escapeHtml(r.note)}</em></span><span class="rec-ready">${escapeHtml(r.action)}</span>${icon('arrow',17)}</button>`).join('') : '<div class="module-empty"><strong>Aucune décision pour le moment.</strong><p>Les recommandations apparaîtront après la première synchronisation.</p></div>'
   return `<div class="today page-enter"><header class="minimal-head"><span>ANETO / AUJOURD’HUI</span><div class="brain-status"><i></i>${isDemo?'Le cerveau a appris 128 nouvelles choses cette nuit':`${bootstrap.memoryEvents.length} événements chargés depuis la mémoire`}</div></header>${syncButton}${syncedLibrary}<section class="intent"><p>Bonjour${firstName ? ` ${firstName}` : ''}.</p><h1>Que veux-tu accomplir<br><em>aujourd’hui ?</em></h1>${goals}</section><section class="daily"><div class="daily-title"><p>AUJOURD’HUI, JE RECOMMANDE</p><span>${recommendations.length} décision${recommendations.length>1?'s':''}</span></div><div class="recommendations">${recommendationList}</div></section><footer class="quiet-footer"><span>Rien ne sera publié sans ton accord.</span><button data-view="memory">Ce qu’Aneto a appris ${icon('arrow',14)}</button></footer></div>`
 }
 
@@ -133,30 +153,67 @@ async function syncAllSources() {
 }
 
 function intelligence() {
-  if (!isDemo) return unavailableModule('MEDIA DNA™', 'Intelligence', 'Le calcul Media DNA sera activé après la première synchronisation complète.')
+  if (!isDemo && !analysis.count) return unavailableModule('MEDIA DNA™', 'Intelligence', 'Synchronise une première source pour calculer les performances réelles.')
+  if (!isDemo) {
+    const top = analysis.top
+    const dna = [
+      ['PORTÉE', `${compactNumber(analysis.totalPrimary)} vues`, `${analysis.count} contenus`],
+      ['MOYENNE', `${compactNumber(analysis.averagePrimary)} vues`, 'par contenu'],
+      ['ENGAGEMENT', `${analysis.engagementRate.toLocaleString('fr-FR', { maximumFractionDigits:1 })} %`, `${compactNumber(analysis.totalLikes + analysis.totalComments)} réactions`],
+      ['FORMAT', formatDuration(analysis.averageDurationSeconds), 'durée moyenne'],
+      ['SUJET', analysis.topics[0]?.label ?? 'À qualifier', analysis.topics[0] ? `${analysis.topics[0].count} occurrence${analysis.topics[0].count>1?'s':''}` : 'titres analysés'],
+    ]
+    const evidence = analysis.ranked.slice(0, 3)
+    return `<div class="page intelligence page-enter"><header class="page-head"><div><span>MEDIA DNA™ / DONNÉES RÉELLES</span><h1>Intelligence</h1></div><div class="learning"><i></i><span>Couverture des métriques<strong>${analysis.coverage} %</strong></span></div></header><section class="prediction"><div class="prediction-label">CONTENU LE PLUS PERFORMANT</div><div class="prediction-main"><div><p>Le signal le plus fort est</p><h2>${escapeHtml(top.title)}</h2></div><div class="probability answer-probability"><strong>${compactNumber(primaryMetric(top))}</strong><small>${top.kind==='video'?'vues YouTube':'écoutes Ausha'}<br>synchronisées</small></div></div><div class="prediction-reason"><span>${icon('brain',17)}</span><p>Résultat calculé sur <strong>${analysis.count} contenus réels</strong>, ${compactNumber(analysis.totalLikes)} likes et ${compactNumber(analysis.totalComments)} commentaires. Aucun benchmark fictif.</p><button data-view="today">Voir les contenus ${icon('arrow',15)}</button></div></section><section class="dna"><div class="section-label"><span>TON ADN MESURÉ</span><em>Mis à jour à la dernière synchronisation</em></div><div class="dna-grid">${dna.map(([type,value,metric],i)=>`<div class="dna-trait"><span>0${i+1} · ${type}</span><strong>${escapeHtml(value)}</strong><em>${escapeHtml(metric)}</em></div>`).join('')}</div></section><section class="because"><span>LES 3 PREUVES LES PLUS FORTES</span><div class="evidence-line">${evidence.map((item,index)=>`<i class="${index===0?'now':''}"></i><article><small>${item.publishedAt?new Date(item.publishedAt).toLocaleDateString('fr-FR'):'DATE INCONNUE'}</small><strong>${escapeHtml(item.title)}</strong><p>${compactNumber(primaryMetric(item))} ${item.kind==='video'?'vues':'écoutes'} · ${compactNumber(item.payload?.likeCount)} likes · ${compactNumber(item.payload?.commentCount)} commentaires</p></article>`).join('')}</div></section></div>`
+  }
   const dna=[['SUJET','Transformation vécue','× 1,7'],['INVITÉ','Opérateur, pas expert','+ 24 %'],['ÉMOTION','Vulnérabilité','81 / 100'],['FORMAT','Conversation dense','48–62 min'],['PROMESSE','Contre-intuitive','× 2,1']]
   return `<div class="page intelligence page-enter"><header class="page-head"><div><span>MEDIA DNA™</span><h1>Intelligence</h1></div><div class="learning"><i></i><span>Confiance du modèle<strong>91 %</strong></span></div></header><section class="prediction"><div class="prediction-label">SI TU PUBLIAIS UN ÉPISODE AUJOURD’HUI</div><div class="prediction-main"><div><p>Le meilleur pari serait</p><h2>Un restaurateur qui a failli tout perdre,<br>puis a réinventé son management.</h2></div><div class="probability"><strong>78<span>%</span></strong><small>probabilité de<br>surperformance</small></div></div><div class="prediction-reason"><span>${icon('brain',17)}</span><p>Cette recommandation ne vient pas d’un prompt. Elle croise <strong>4 ans de mémoire</strong>, 286 publications, 31 400 commentaires et les signaux détectés cette nuit.</p><button id="prepare-episode">Tout préparer ${icon('arrow',15)}</button></div></section><section class="dna"><div class="section-label"><span>TON ADN ÉDITORIAL</span><em>Dernière évolution aujourd’hui, 03:42</em></div><div class="dna-grid">${dna.map(([type,value,metric],i)=>`<div class="dna-trait"><span>0${i+1} · ${type}</span><strong>${value}</strong><em>${metric}</em></div>`).join('')}</div></section><section class="because"><span>POURQUOI ANETO LE SAIT</span><div class="evidence-line"><i></i><article><small>12 JANVIER</small><strong>Miniature recadrée</strong><p>CTR +18 %. Le modèle augmente le poids du cadrage serré.</p></article><i></i><article><small>28 FÉVRIER</small><strong>Épisode “sans filtre”</strong><p>Rétention +31 %. La vulnérabilité devient un signal fort.</p></article><i class="now"></i><article><small>AUJOURD’HUI</small><strong>Signal « restaurant »</strong><p>La demande externe rejoint exactement ton Media DNA.</p></article></div></section></div>`
 }
 
 function graph() {
-  if (!isDemo) return unavailableModule('CONNAISSANCES', 'Tout sera relié.', 'Le graphe restera vide jusqu’à ce que de vraies entités soient extraites des contenus.')
-  const selected=graphNodes.find(n=>n.id===state.selectedNode) || graphNodes[0]
-  return `<div class="page graph-page page-enter"><header class="page-head graph-head"><div><span>CONNAISSANCES / 18 420 CONNEXIONS</span><h1>Tout est relié.</h1></div><button class="graph-search">${icon('search',16)} Explorer une connaissance <kbd>⌘ F</kbd></button></header><section class="graph-stage"><svg viewBox="0 0 1000 660" role="img" aria-label="Graphe de connaissances autour de Thomas Fantini"><defs><filter id="glow"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>${graphNodes.slice(1).map((n,i)=>{const root=graphNodes[0];return `<line x1="${root.x*10}" y1="${root.y*6.6}" x2="${n.x*10}" y2="${n.y*6.6}" class="connection ${state.selectedNode===n.id?'active':''}"/><circle cx="${(root.x*10+n.x*10)/2}" cy="${(root.y*6.6+n.y*6.6)/2}" r="2" class="signal-dot"><animate attributeName="opacity" values=".1;1;.1" dur="${2+i*.2}s" repeatCount="indefinite"/></circle>`}).join('')}${graphNodes.map(n=>`<g class="node ${n.kind} ${state.selectedNode===n.id?'selected':''}" data-node="${n.id}" transform="translate(${n.x*10} ${n.y*6.6})" tabindex="0"><circle r="${n.r}"/><text text-anchor="middle" y="${n.id==='Thomas Fantini'?-3:3}" class="node-title">${n.id}</text>${n.id==='Thomas Fantini'?`<text text-anchor="middle" y="16" class="node-sub">PERSONNE · ${n.score}</text>`:''}</g>`).join('')}</svg><aside class="node-inspector"><div class="node-kind">${selected.kind.toUpperCase()}</div><h2>${selected.id}</h2><p>${selected.desc}</p><div class="node-stats"><div><span>CONNEXIONS</span><strong>${selected.id==='Thomas Fantini'?'47':'12'}</strong></div><div><span>CONFIANCE</span><strong>${selected.id==='Thomas Fantini'?'94 %':'87 %'}</strong></div></div><button data-detail="0">Voir ce qu’Aneto recommande ${icon('arrow',15)}</button></aside><div class="graph-legend"><span><i class="person"></i>Personne</span><span><i class="topic"></i>Sujet</span><span><i class="memory"></i>Mémoire</span><em>Glisser · Cliquer pour explorer</em></div></section></div>`
+  if (!isDemo && !analysis.count) return unavailableModule('CONNAISSANCES', 'Tout sera relié.', 'Synchronise une première source pour créer le graphe réel.')
+  const positions = [[23,22],[72,18],[84,45],[75,76],[27,78],[14,48],[49,86],[50,12]]
+  const liveNodes = !isDemo ? [
+    {id:'workspace',label:bootstrap.organization?.name ?? 'Média',x:50,y:48,r:42,kind:'person',score:`${analysis.count}`,connections:analysis.count+analysis.topics.length,desc:`Espace relié à ${analysis.count} contenus synchronisés et ${analysis.topics.length} sujets détectés.`},
+    ...analysis.ranked.slice(0,5).map((item,index)=>({id:item.id,label:item.title.length>22?`${item.title.slice(0,20)}…`:item.title,x:positions[index][0],y:positions[index][1],r:Math.min(34,22+Math.round((primaryMetric(item)/(primaryMetric(analysis.top)||1))*12)),kind:'content',score:compactNumber(primaryMetric(item)),connections:1,desc:`${item.title} · ${compactNumber(primaryMetric(item))} ${item.kind==='video'?'vues':'écoutes'}.`,url:item.provider==='youtube'?`https://www.youtube.com/watch?v=${encodeURIComponent(item.externalId)}`:null})),
+    ...analysis.topics.slice(0,3).map((topic,index)=>({id:`topic-${index}`,label:topic.label,x:positions[index+5][0],y:positions[index+5][1],r:20+topic.count*2,kind:'topic',score:`${topic.count}×`,connections:topic.count,desc:`Sujet présent dans ${topic.count} contenu${topic.count>1?'s':''} synchronisé${topic.count>1?'s':''}.`})),
+  ] : graphNodes.map(node=>({...node,label:node.id,connections:node.id==='Thomas Fantini'?47:12}))
+  const root=liveNodes[0]
+  const selected=liveNodes.find(n=>n.id===state.selectedNode) || root
+  const inspectorAction = isDemo ? `<button data-detail="0">Voir ce qu’Aneto recommande ${icon('arrow',15)}</button>` : selected.url ? `<a href="${selected.url}" target="_blank" rel="noreferrer">Ouvrir le contenu ${icon('arrow',15)}</a>` : `<button data-view="today">Voir les contenus ${icon('arrow',15)}</button>`
+  const graphLabel = isDemo ? 'CONNAISSANCES / 18 420 CONNEXIONS' : `CONNAISSANCES / ${liveNodes.length-1} CONNEXIONS RÉELLES`
+  return `<div class="page graph-page page-enter"><header class="page-head graph-head"><div><span>${graphLabel}</span><h1>Tout est relié.</h1></div><button class="graph-search">${icon('search',16)} Explorer une connaissance <kbd>⌘ F</kbd></button></header><section class="graph-stage"><svg viewBox="0 0 1000 660" role="img" aria-label="Graphe des contenus synchronisés"><defs><filter id="glow"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>${liveNodes.slice(1).map((n,i)=>`<line x1="${root.x*10}" y1="${root.y*6.6}" x2="${n.x*10}" y2="${n.y*6.6}" class="connection ${state.selectedNode===n.id?'active':''}"/><circle cx="${(root.x*10+n.x*10)/2}" cy="${(root.y*6.6+n.y*6.6)/2}" r="2" class="signal-dot"><animate attributeName="opacity" values=".1;1;.1" dur="${2+i*.2}s" repeatCount="indefinite"/></circle>`).join('')}${liveNodes.map((n,index)=>`<g class="node ${n.kind} ${selected.id===n.id?'selected':''}" data-node="${n.id}" transform="translate(${n.x*10} ${n.y*6.6})" tabindex="0"><circle r="${n.r}"/><text text-anchor="middle" y="${index===0?-3:3}" class="node-title">${escapeHtml(n.label)}</text>${index===0?`<text text-anchor="middle" y="16" class="node-sub">${isDemo?`PERSONNE · ${n.score}`:`ESPACE · ${n.score} CONTENUS`}</text>`:''}</g>`).join('')}</svg><aside class="node-inspector"><div class="node-kind">${selected.kind==='content'?'CONTENU':selected.kind.toUpperCase()}</div><h2>${escapeHtml(selected.label)}</h2><p>${escapeHtml(selected.desc)}</p><div class="node-stats"><div><span>CONNEXIONS</span><strong>${selected.connections}</strong></div><div><span>SIGNAL</span><strong>${selected.score}</strong></div></div>${inspectorAction}</aside><div class="graph-legend"><span><i class="person"></i>${isDemo?'Personne':'Espace'}</span><span><i class="topic"></i>Sujet</span><span><i class="memory"></i>${isDemo?'Mémoire':'Contenu'}</span><em>Cliquer pour explorer</em></div></section></div>`
 }
 
 function memory() {
-  const events=isDemo ? [
+  const demoEvents = [
     ['AUJOURD’HUI','Le signal « restaurant » accélère','YouTube + Google + Presse convergent. Poids du sujet augmenté de 12 %.','signal'],
     ['12 JANVIER','Tu as changé la miniature de Thomas Fantini','CTR passé de 4,9 % à 5,8 %. Aneto retient : cadrage serré + tension visible.','learn'],
     ['04 DÉCEMBRE','Tu as refusé un hook trop spectaculaire','La version sobre a mieux fidélisé à J+30. Ton ADN privilégie la crédibilité.','decision'],
     ['18 OCTOBRE','L’épisode “Burn-out” a surpris','Performance moyenne au départ, puis +63 % sur 90 jours. Aneto apprend à regarder au-delà du lancement.','learn']
-  ] : bootstrap.memoryEvents.map(event => [new Date(event.observedAt).toLocaleDateString('fr-FR'), event.eventType, `Source : ${event.source}`, 'learn'])
-  const timeline = events.length ? events.map(([date,title,desc,type],i)=>`<article class="memory-event"><div class="memory-date">${date}</div><i class="${type}"></i><div><span>${type==='learn'?'APPRENTISSAGE':type==='signal'?'SIGNAL CROISÉ':'DÉCISION HUMAINE'}</span><h3>${title}</h3><p>${desc}</p>${isDemo&&i===1?'<em>Impact mémorisé · +18 % CTR</em>':''}</div></article>`).join('') : '<div class="module-empty"><strong>La mémoire est vide.</strong><p>Le premier événement sera créé par une synchronisation ou une décision humaine.</p></div>'
+  ]
+  const persistedEvents = bootstrap.memoryEvents.map(event => ({date:event.observedAt,title:event.eventType,desc:`Source : ${event.source}`,type:'learn',label:'ÉVÉNEMENT MÉMORISÉ'}))
+  const syncEvents = bootstrap.sources.filter(source=>source.lastSyncedAt).map(source=>({date:source.lastSyncedAt,title:`${source.provider==='youtube'?'YouTube':'Ausha'} synchronisé`,desc:`${bootstrap.contentItems.filter(item=>item.provider===source.provider).length} contenus connus après cette synchronisation.`,type:'signal',label:'SYNCHRONISATION'}))
+  const contentEvents = bootstrap.contentItems.slice(0,8).map(item=>({date:item.publishedAt,title:item.title,desc:`${compactNumber(primaryMetric(item))} ${item.kind==='video'?'vues':'écoutes'} · importé depuis ${item.provider==='youtube'?'YouTube':'Ausha'}.`,type:'learn',label:'CONTENU IMPORTÉ'}))
+  const liveEvents = [...persistedEvents,...syncEvents,...contentEvents].filter(event=>event.date).sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,12)
+  const events = isDemo ? demoEvents.map(([date,title,desc,type])=>({date,title,desc,type,label:type==='learn'?'APPRENTISSAGE':type==='signal'?'SIGNAL CROISÉ':'DÉCISION HUMAINE'})) : liveEvents
+  const timeline = events.length ? events.map((event,i)=>`<article class="memory-event"><div class="memory-date">${isDemo?event.date:new Date(event.date).toLocaleDateString('fr-FR')}</div><i class="${event.type}"></i><div><span>${event.label}</span><h3>${escapeHtml(event.title)}</h3><p>${escapeHtml(event.desc)}</p>${isDemo&&i===1?'<em>Impact mémorisé · +18 % CTR</em>':''}</div></article>`).join('') : '<div class="module-empty"><strong>La mémoire est vide.</strong><p>Le premier événement sera créé par une synchronisation ou une décision humaine.</p></div>'
   return `<div class="page memory-page page-enter"><header class="page-head"><div><span>MÉMOIRE LONGUE</span><h1>Rien n’est oublié.</h1></div><div class="memory-count"><strong>${events.length}</strong><span>événements<br>chargés</span></div></header><section class="memory-summary"><p>Aneto se souvient de chaque décision et de ce qui s’est passé ensuite.</p><div><span>Décisions mémorisées<strong>${isDemo?'286':bootstrap.decisions.length}</strong></span><span>Contenus connus<strong>${isDemo?'174':bootstrap.contentItems.length}</strong></span><span>Sources actives<strong>${isDemo?'8':bootstrap.sources.filter(source=>source.state==='connected').length}</strong></span></div></section><section class="timeline"><div class="timeline-line"></div>${timeline}</section></div>`
 }
 
 function research() {
-  if (!isDemo) return unavailableModule('RESEARCH / VEILLE CONTINUE', 'Le monde bouge. Aneto regardera.', 'La veille sera activée lorsqu’un premier connecteur sera synchronisé.')
+  if (!isDemo && !analysis.count) return unavailableModule('RESEARCH / SIGNAUX', 'Les contenus parleront.', 'Synchronise une première source pour faire émerger des opportunités réelles.')
+  if (!isDemo) {
+    const rankedComments = [...analysis.ranked].sort((a,b)=>(Number(b.payload?.commentCount)||0)-(Number(a.payload?.commentCount)||0))
+    const ops = [
+      ['01',`Capitaliser sur « ${analysis.top.title} »`,'Performance',`${compactNumber(primaryMetric(analysis.top))} ${metricLabel(analysis.top)}`],
+      ...(analysis.totalComments ? [['02',`Prolonger la conversation sur « ${rankedComments[0].title} »`,'Conversation',`${compactNumber(rankedComments[0].payload?.commentCount)} commentaires`]] : []),
+      ...(analysis.topics[0] ? [['03',`Explorer davantage le sujet « ${analysis.topics[0].label} »`,'Sujet',`${analysis.topics[0].count} contenus`]] : []),
+      ...analysis.ranked.slice(1,3).map((item,index)=>[String(index+4).padStart(2,'0'),`Comparer le potentiel de « ${item.title} »`,'Bibliothèque',`${compactNumber(primaryMetric(item))} ${metricLabel(item)}`]),
+    ].slice(0,5)
+    const activeProviders = [...new Set(bootstrap.sources.filter(source=>source.state==='connected').map(source=>source.provider.toUpperCase()))]
+    return `<div class="page research-page page-enter"><header class="page-head"><div><span>RESEARCH / SIGNAUX INTERNES</span><h1>Tes contenus parlent.<br>Aneto compare.</h1></div><div class="scan-orbit"><i></i><span>${bootstrap.sources.filter(source=>source.state==='connected').length} source${bootstrap.sources.filter(source=>source.state==='connected').length>1?'s':''} active${bootstrap.sources.filter(source=>source.state==='connected').length>1?'s':''}<small>${analysis.count} contenus analysés</small></span></div></header><section class="scan-sources">${activeProviders.map(provider=>`<span>${provider}</span>`).join('')}<em>Données issues de la dernière synchronisation</em></section><section class="opportunities"><div class="section-label"><span>OPPORTUNITÉS DÉTECTÉES</span><em>Classées par signal mesuré</em></div>${ops.map(([num,title,type,score])=>`<button class="opportunity signal-arrival" data-view="today"><span>${num}</span><strong>${escapeHtml(title)}</strong><em>${type}</em><b>${escapeHtml(score)}</b>${icon('arrow',16)}</button>`).join('')}</section><section class="research-note"><span>${icon('brain',18)}</span><p>Ces signaux utilisent uniquement les performances synchronisées. <strong>La veille externe n’est pas encore activée.</strong></p></section></div>`
+  }
   const ops=[['01','La restauration indépendante cherche une nouvelle voix','Sujet','+42 %'],['02','Camille Étienne × économie réelle','Invité','92 / 100'],['03','Le “quiet leadership” arrive en France','Tendance','+118 %'],['04','Les coulisses d’une transmission de PME','Angle','Fort']]
   return `<div class="page research-page page-enter"><header class="page-head"><div><span>RESEARCH / VEILLE CONTINUE</span><h1>Le monde bouge.<br>Aneto regarde.</h1></div><div class="scan-orbit"><i></i><span>8 sources actives<small>Prochain scan · 02:00</small></span></div></header><section class="scan-sources"><span>YOUTUBE</span><span>SPOTIFY</span><span>TIKTOK</span><span>GOOGLE</span><span>LINKEDIN</span><span>PRESSE</span><span>PODCASTS</span><em>Analysés cette nuit</em></section><section class="opportunities"><div class="section-label"><span>OPPORTUNITÉS DÉTECTÉES</span><em>Classées selon ton Media DNA</em></div>${ops.map(([num,title,type,score])=>`<button class="opportunity"><span>${num}</span><strong>${title}</strong><em>${type}</em><b>${score}</b>${icon('arrow',16)}</button>`).join('')}</section><section class="research-note"><span>${icon('brain',18)}</span><p>Aneto n’affiche pas ce qui est populaire. Il montre ce qui devient pertinent <strong>pour toi</strong>.</p></section></div>`
 }
@@ -167,8 +224,8 @@ function unavailableModule(label, title, message) {
 
 function detailDrawer() {
   const r=recommendations[state.detail]
-  const proof = isDemo ? `<div class="prepared-block"><div class="agent-orbs"><i>S</i><i>C</i><i>G</i></div><div><span>3 agents ont travaillé</span><strong>${r.action}</strong></div>${icon('check',18)}</div><div class="reason-list"><span>CE QUI A ÉTÉ CROISÉ</span><p><i></i>4 ans de mémoire éditoriale</p><p><i></i>Signaux externes des dernières 24 h</p><p><i></i>Performance de 286 publications</p><p><i></i>Ton Media DNA actuel</p></div><button class="validate" id="validate-action">Valider et planifier ${icon('arrow',16)}</button>` : '<div class="prepared-block"><div><span>ÉTAT PERSISTÉ</span><strong>Cette décision provient de Supabase.</strong></div></div>'
-  return `<div class="scrim" data-close></div><aside class="drawer page-enter" role="dialog" aria-modal="true" aria-label="Détail de la décision"><button class="close" data-close aria-label="Fermer">${icon('close')}</button><span class="drawer-label">${r.type} · CONFIANCE ${r.confidence}</span><h2>${r.title}</h2><p>${r.detail}</p>${proof}<button class="secondary" data-close>Fermer</button></aside>`
+  const proof = isDemo ? `<div class="prepared-block"><div class="agent-orbs"><i>S</i><i>C</i><i>G</i></div><div><span>3 agents ont travaillé</span><strong>${r.action}</strong></div>${icon('check',18)}</div><div class="reason-list"><span>CE QUI A ÉTÉ CROISÉ</span><p><i></i>4 ans de mémoire éditoriale</p><p><i></i>Signaux externes des dernières 24 h</p><p><i></i>Performance de 286 publications</p><p><i></i>Ton Media DNA actuel</p></div><button class="validate" id="validate-action">Valider et planifier ${icon('arrow',16)}</button>` : r.origin==='persisted' ? '<div class="prepared-block"><div><span>ÉTAT PERSISTÉ</span><strong>Cette décision provient de Supabase.</strong></div></div>' : `<div class="prepared-block"><div><span>CALCUL SUR DONNÉES RÉELLES</span><strong>${escapeHtml(r.action)}</strong></div>${icon('check',18)}</div><div class="reason-list"><span>CE QUI A ÉTÉ CROISÉ</span><p><i></i>${analysis.count} contenus synchronisés</p><p><i></i>${compactNumber(analysis.totalViews)} vues</p><p><i></i>${compactNumber(analysis.totalLikes)} likes</p><p><i></i>${compactNumber(analysis.totalComments)} commentaires</p></div>`
+  return `<div class="scrim" data-close></div><aside class="drawer page-enter" role="dialog" aria-modal="true" aria-label="Détail de la décision"><button class="close" data-close aria-label="Fermer">${icon('close')}</button><span class="drawer-label">${escapeHtml(r.type)} · ${escapeHtml(r.confidence)}</span><h2>${escapeHtml(r.title)}</h2><p>${escapeHtml(r.detail)}</p>${proof}<button class="secondary" data-close>Fermer</button></aside>`
 }
 
 function workflowPanel() {

@@ -84,7 +84,7 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
   const [organizationResult, sourcesResult, contentResult, decisionsResult, memoryResult] = await Promise.all([
     supabase.from('organizations').select('id, name, slug').eq('id', organizationId).single(),
     supabase.from('sources').select('id, provider, state, last_synced_at').eq('organization_id', organizationId).order('created_at'),
-    supabase.from('content_items').select('id, source_id, kind, external_id, title, published_at, payload').eq('organization_id', organizationId).order('published_at', { ascending: false }).limit(20),
+    supabase.from('content_items').select('id, source_id, kind, external_id, title, published_at, payload').eq('organization_id', organizationId).order('published_at', { ascending: false }).limit(500),
     supabase.from('decisions').select('id, title, rationale, status, confidence, created_at').eq('organization_id', organizationId).order('created_at', { ascending: false }).limit(12),
     supabase.from('memory_events').select('id, event_type, source, confidence, observed_at, impact').eq('organization_id', organizationId).order('observed_at', { ascending: false }).limit(30),
   ])

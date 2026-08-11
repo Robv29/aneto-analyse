@@ -99,7 +99,7 @@
 .prediction-main p{display:none}
 .prediction-reason p{color:#969b90}
 .prediction-reason>span{color:#d9dbd3}
-.prediction-reason button,.node-inspector button,.validate,.workflow-footer button{background:#ecece5;color:#10110e}
+.prediction-reason button,.node-inspector button,.node-inspector a,.validate,.workflow-footer button{background:#ecece5;color:#10110e}
 .dna{padding:48px 0}
 .dna-trait em{color:#e2e3dc;font-size:13px}
 .evidence-line p,.node-inspector>p,.memory-event p,.research-note p{color:#8f9489}
@@ -114,8 +114,10 @@
 .node:nth-of-type(3n) circle{animation-delay:-2.5s;animation-duration:10s}
 .node:nth-of-type(4n) circle{animation-delay:-5s;animation-duration:12s}
 .node.person circle{stroke:#8e9780;filter:url(#glow)}
+.node.content circle{stroke:#667055;fill:#171b14}
 .node:hover circle,.node.selected circle{stroke:#d9dbd3;fill:#1d2119}
 .node-kind{color:#d9dbd3}
+.node-inspector a{width:100%;justify-content:center;border:0;border-radius:7px;padding:10px 13px;display:flex;align-items:center;gap:8px;font-size:9px;font-weight:700;text-decoration:none}
 
 .timeline-line{width:2px;background:#34382f}
 .memory-event>i{width:10px;height:10px}

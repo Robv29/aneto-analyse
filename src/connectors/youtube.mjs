@@ -1,25 +1,10 @@
 const stringOrNull = (value) => typeof value === 'string' && value.length ? value : null
 const countOrNull = (value) => /^\d+$/.test(String(value ?? '')) ? Number(value) : null
 
+import { timedSegmentsFromVtt } from '../clips.mjs'
+
 export function plainTextFromVtt(vtt) {
-  const lines = String(vtt ?? '').replace(/^\uFEFF/, '').split(/\r?\n/)
-  const output = []
-  for (const rawLine of lines) {
-    const line = rawLine.trim()
-    if (!line || line === 'WEBVTT' || line.startsWith('NOTE') || line.includes('-->') || /^\d+$/.test(line)) continue
-    const clean = line
-      .replace(/<\/?[^>]+>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (clean && output.at(-1) !== clean) output.push(clean)
-  }
-  return output.join('\n')
+  return timedSegmentsFromVtt(vtt).map((segment) => segment.text).join('\n')
 }
 
 export function normalizeYouTubeVideo(input, observedAt = new Date().toISOString()) {

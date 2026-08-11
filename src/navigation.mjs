@@ -1,6 +1,7 @@
 const routes = Object.freeze({
   today: '/',
   intelligence: '/intelligence',
+  clips: '/clips',
   graph: '/graph',
   memory: '/memory',
   research: '/research',

@@ -6,6 +6,7 @@ test('every product view has a stable route', () => {
   const routes = {
     today: '/',
     intelligence: '/intelligence',
+    clips: '/clips',
     graph: '/graph',
     memory: '/memory',
     research: '/research',

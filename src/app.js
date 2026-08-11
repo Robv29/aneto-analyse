@@ -1,5 +1,6 @@
 import { pathForView, viewForPath } from './navigation.mjs'
 import { analyzeContent, primaryMetric } from './analytics.mjs'
+import { formatClipTime } from './clips.mjs'
 
 const bootstrap = window.__ANETO_BOOTSTRAP__ || {
   mode: 'demo', viewer: null, organization: null, sources: [], contentItems: [], decisions: [], memoryEvents: [], connectors: [],
@@ -9,6 +10,7 @@ const isDemo = bootstrap.mode === 'demo'
 const icons = {
   home:'<path d="M4 11.5 12 5l8 6.5V20H4Z"/><path d="M9 20v-6h6v6"/>',
   brain:'<path d="M9.5 4.5A3.5 3.5 0 0 0 6 8v.4A3.6 3.6 0 0 0 4 15a3.5 3.5 0 0 0 5.5 2.9M14.5 4.5A3.5 3.5 0 0 1 18 8v.4a3.6 3.6 0 0 1 2 6.6 3.5 3.5 0 0 1-5.5 2.9M12 4v16M8.5 9.5c2 0 3.5 1.2 3.5 3M15.5 9.5c-2 0-3.5 1.2-3.5 3"/>',
+  clip:'<path d="m4 7 16 10M4 17 20 7"/><circle cx="4" cy="5" r="2.5"/><circle cx="4" cy="19" r="2.5"/>',
   graph:'<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="m10.8 7.2-4.6 8.6M13.2 7.2l4.6 8.6M7.5 18h9"/>',
   memory:'<path d="M5 7a7 7 0 1 1 0 10"/><path d="M5 3v4h4M12 8v5l3 2"/>',
   radar:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="m12 12 5-5M12 3v2M21 12h-2"/>',
@@ -35,6 +37,9 @@ const contentHref = (item) => item?.transcript?.status === 'available'
     : null
 const analysis = analyzeContent(bootstrap.contentItems)
 const transcriptCount = bootstrap.contentItems.filter(item => item.transcript?.status === 'available').length
+const timedTranscriptCount = bootstrap.contentItems.filter(item => item.transcript?.timed).length
+const clipCandidates = bootstrap.contentItems.flatMap(item => (item.transcript?.clips ?? []).map(clip => ({ ...clip, item })))
+  .sort((a,b) => b.score - a.score || primaryMetric(b.item) - primaryMetric(a.item))
 
 const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini', syncing:false, syncMessage:null, syncTone:null, committingDecision:false, decisionMessage:null, currentDecision:null }
 
@@ -94,6 +99,7 @@ const graphNodes = [
 function shell(content) {
   const navGroups = [
     { label:'DÉCIDER', items:[['today','home','Aujourd’hui'],['intelligence','brain','Intelligence']] },
+    { label:'PRODUIRE', items:[['clips','clip','Extraits']] },
     { label:'COMPRENDRE', items:[['graph','graph','Connaissances'],['memory','memory','Mémoire'],['research','radar','Signaux']] },
   ]
   const identity = bootstrap.viewer?.displayName || bootstrap.viewer?.email || 'Paramètres'
@@ -188,7 +194,14 @@ function intelligence() {
           href:'/settings',
           cta:'Autoriser les transcriptions',
         }
-      : {
+      : clipCandidates.length ? {
+          label:'DÉRUSHAGE PRIORITAIRE',
+          title:`Couper les ${Math.min(3,clipCandidates.length)} passages les plus prometteurs avant de produire davantage.`,
+          rationale:`Aneto a retrouvé ${clipCandidates.length} passage${clipCandidates.length>1?'s':''} minuté${clipCandidates.length>1?'s':''}. Le premier démarre à ${formatClipTime(clipCandidates[0].start)} dans « ${clipCandidates[0].item.title} » et combine ${clipCandidates[0].reasons.join(', ') || 'une formulation autonome'}.`,
+          confidence:'PASSAGES VÉRIFIABLES',
+          href:'/clips',
+          cta:'Ouvrir la table de montage',
+        } : {
           label:'DÉCISION PRIORITAIRE',
           title:`Réexaminer « ${top.title} » avant de produire un nouveau sujet.`,
           rationale:`Ce contenu dépasse la moyenne de ${Math.max(0,leadDelta)} %${topic ? ` et renforce le signal « ${topic} »` : ''}. Aneto recommande d’en extraire d’abord la mécanique éditoriale réutilisable.`,
@@ -196,11 +209,11 @@ function intelligence() {
           href:topHref ?? '/',
           cta:top.transcript?.status === 'available' ? 'Ouvrir la matière analysée' : 'Ouvrir le contenu source',
         }
-    state.currentDecision = maturity === 'bloqué' ? null : { title:decision.title, rationale:decision.rationale, contentItemId:top.id }
+    state.currentDecision = maturity === 'bloqué' ? null : { title:decision.title, rationale:decision.rationale, contentItemId:clipCandidates[0]?.item.id ?? top.id }
     const proofs = [
       {label:'PERFORMANCE',value:`${compactNumber(primaryMetric(top))} ${metricLabel(top)}`,detail:leadDelta > 0 ? `+${leadDelta} % par rapport à la moyenne actuelle.` : 'Meilleur résultat de la bibliothèque actuelle.'},
       {label:'RÉACTION',value:`${analysis.engagementRate.toLocaleString('fr-FR',{maximumFractionDigits:1})} %`,detail:`${compactNumber(analysis.totalLikes + analysis.totalComments)} réactions mesurées sur YouTube.`},
-      {label:'COMPRÉHENSION',value:`${transcriptCount} / ${analysis.count}`,detail:transcriptCount ? 'contenus dont le sens peut être analysé.' : 'Aucun récit, hook ou passage encore lisible.'},
+      {label:'DÉRUSHAGE',value:`${clipCandidates.length}`,detail:clipCandidates.length ? `passages minutés dans ${timedTranscriptCount} vidéo${timedTranscriptCount>1?'s':''}.` : transcriptCount ? 'Resynchronisation nécessaire pour récupérer les timecodes.' : 'Aucun récit, hook ou passage encore lisible.'},
     ]
     const hypotheses = [
       {label:'SUJET DOMINANT',value:topic ?? 'Non qualifié',state:transcriptCount ? 'Hypothèse issue des textes disponibles' : 'Métadonnées seulement'},
@@ -210,7 +223,7 @@ function intelligence() {
     const loop = [
       ['01','Comprendre',transcriptCount ? `${transcriptCount} transcription${transcriptCount>1?'s':''} exploitable${transcriptCount>1?'s':''}` : 'Autorisation requise',transcriptCount?'done':'blocked'],
       ['02','Décider','Une priorité, fondée sur les données disponibles','active'],
-      ['03','Préparer','Hooks, extraits et textes après analyse sémantique','waiting'],
+      ['03','Préparer',clipCandidates.length ? `${clipCandidates.length} extraits avec hooks et timecodes` : 'Hooks, extraits et textes après dérushage',clipCandidates.length?'done':'waiting'],
       ['04','Mesurer','Comparer la publication à sa référence','waiting'],
       ['05','Apprendre',`${bootstrap.memoryEvents.length} événement${bootstrap.memoryEvents.length>1?'s':''} déjà mémorisé${bootstrap.memoryEvents.length>1?'s':''}`,bootstrap.memoryEvents.length?'done':'waiting'],
     ]
@@ -218,6 +231,7 @@ function intelligence() {
       <header class="page-head intelligence-head"><div><span>MEDIA DNA™ / RAISONNEMENT ÉDITORIAL</span><h1>Intelligence</h1></div><div class="learning intelligence-state ${maturity}"><i></i><span>Niveau de compréhension<strong>${maturity==='bloqué'?'À débloquer':maturity==='partiel'?'Partiel':maturity==='initial'?'Signal initial':'En apprentissage'}</strong></span></div></header>
       <section class="understanding"><span>CE QU’ANETO A COMPRIS</span><h2>${escapeHtml(understanding)}</h2><p>${transcriptCount ? `${transcriptCount} transcription${transcriptCount>1?'s':''} alimente${transcriptCount>1?'nt':''} cette lecture. Aneto sépare les faits des hypothèses tant que la couverture reste incomplète.` : 'Les chiffres décrivent la performance. Les transcriptions permettront d’expliquer les sujets, les histoires, les émotions et les passages qui la provoquent.'}</p></section>
       <section class="decision-card"><div class="decision-number">01</div><div class="decision-copy"><span>${decision.label}</span><h2>${escapeHtml(decision.title)}</h2><p>${escapeHtml(decision.rationale)}</p><em>${decision.confidence}</em>${state.decisionMessage?`<div class="decision-feedback" role="status">${escapeHtml(state.decisionMessage)}</div>`:''}</div><div class="decision-actions"><a href="${decision.href}"${decision.href.startsWith('http')?' target="_blank" rel="noreferrer"':''}>${decision.cta} ${icon('arrow',16)}</a>${maturity!=='bloqué'?`<button id="commit-decision" type="button" ${state.committingDecision?'disabled':''}>${state.committingDecision?'Mémorisation…':'Retenir cette décision'}</button>`:''}</div></section>
+      ${clipCandidates.length ? clipPreview(clipCandidates.slice(0,3)) : transcriptCount ? `<section class="clips-awaiting"><span>${icon('clip',19)}</span><div><small>TIMECODES À RÉCUPÉRER</small><strong>Les textes sont là. Aneto doit maintenant resynchroniser les pistes minutées.</strong></div><button id="sync-from-clips">Relancer l’analyse ${icon('sync',14)}</button></section>` : ''}
       <section class="proofs"><div class="section-label"><span>POURQUOI CETTE DÉCISION</span><em>Faits observés · aucune prédiction inventée</em></div><div class="proof-grid">${proofs.map((proof,index)=>`<article><small>0${index+1} · ${proof.label}</small><strong>${escapeHtml(proof.value)}</strong><p>${escapeHtml(proof.detail)}</p></article>`).join('')}</div></section>
       <section class="hypotheses"><div class="section-label"><span>MEDIA DNA EN APPRENTISSAGE</span><em>Ce qui peut encore changer</em></div>${hypotheses.map((item,index)=>`<article><span>0${index+1}</span><div><small>${item.label}</small><strong>${escapeHtml(item.value)}</strong></div><p>${escapeHtml(item.state)}</p></article>`).join('')}</section>
       <section class="intelligence-loop"><div class="section-label"><span>LA BOUCLE DE VALEUR</span><em>Aneto progresse seulement si le résultat revient dans la mémoire</em></div><div class="loop-grid">${loop.map(([num,title,detail,status])=>`<article class="${status}"><span>${num}</span><i></i><strong>${title}</strong><small>${detail}</small></article>`).join('')}</div></section>
@@ -225,6 +239,29 @@ function intelligence() {
   }
   const dna=[['SUJET','Transformation vécue','× 1,7'],['INVITÉ','Opérateur, pas expert','+ 24 %'],['ÉMOTION','Vulnérabilité','81 / 100'],['FORMAT','Conversation dense','48–62 min'],['PROMESSE','Contre-intuitive','× 2,1']]
   return `<div class="page intelligence page-enter"><header class="page-head"><div><span>MEDIA DNA™</span><h1>Intelligence</h1></div><div class="learning"><i></i><span>Confiance du modèle<strong>91 %</strong></span></div></header><section class="prediction"><div class="prediction-label">SI TU PUBLIAIS UN ÉPISODE AUJOURD’HUI</div><div class="prediction-main"><div><p>Le meilleur pari serait</p><h2>Un restaurateur qui a failli tout perdre,<br>puis a réinventé son management.</h2></div><div class="probability"><strong>78<span>%</span></strong><small>probabilité de<br>surperformance</small></div></div><div class="prediction-reason"><span>${icon('brain',17)}</span><p>Cette recommandation ne vient pas d’un prompt. Elle croise <strong>4 ans de mémoire</strong>, 286 publications, 31 400 commentaires et les signaux détectés cette nuit.</p><button id="prepare-episode">Tout préparer ${icon('arrow',15)}</button></div></section><section class="dna"><div class="section-label"><span>TON ADN ÉDITORIAL</span><em>Dernière évolution aujourd’hui, 03:42</em></div><div class="dna-grid">${dna.map(([type,value,metric],i)=>`<div class="dna-trait"><span>0${i+1} · ${type}</span><strong>${value}</strong><em>${metric}</em></div>`).join('')}</div></section><section class="because"><span>POURQUOI ANETO LE SAIT</span><div class="evidence-line"><i></i><article><small>12 JANVIER</small><strong>Miniature recadrée</strong><p>CTR +18 %. Le modèle augmente le poids du cadrage serré.</p></article><i></i><article><small>28 FÉVRIER</small><strong>Épisode “sans filtre”</strong><p>Rétention +31 %. La vulnérabilité devient un signal fort.</p></article><i class="now"></i><article><small>AUJOURD’HUI</small><strong>Signal « restaurant »</strong><p>La demande externe rejoint exactement ton Media DNA.</p></article></div></section></div>`
+}
+
+function clipPreview(candidates) {
+  return `<section class="clip-preview"><div class="section-label"><span>LES CUTS À REGARDER D’ABORD</span><em>Texte exact · timecode exact · aucun extrait inventé</em></div><div class="clip-preview-grid">${candidates.map((clip,index)=>`<article><span>0${index+1} · ${clip.score}/100</span><small>${escapeHtml(clip.item.title)}</small><h3>${escapeHtml(clip.title)}</h3><p>« ${escapeHtml(clip.hook)} »</p><footer><strong>${formatClipTime(clip.start)} → ${formatClipTime(clip.end)}</strong><a href="https://www.youtube.com/watch?v=${encodeURIComponent(clip.item.externalId)}&t=${clip.start}s" target="_blank" rel="noreferrer">Voir ${icon('play',13)}</a></footer></article>`).join('')}</div><button class="clip-preview-all" data-view="clips">Voir tous les extraits ${icon('arrow',15)}</button></section>`
+}
+
+function clips() {
+  const demoClips = isDemo ? [{id:'demo-1',start:2537,end:2591,duration:54,score:92,title:'La décision qui aurait pu tout arrêter',hook:'J’ai compris que continuer comme ça allait nous coûter beaucoup plus cher que de tout changer.',excerpt:'J’ai compris que continuer comme ça allait nous coûter beaucoup plus cher que de tout changer. À ce moment-là, la vraie décision n’était plus financière : elle concernait toute l’équipe.',reasons:['expérience vécue','tension narrative','durée adaptée au short'],item:{title:'Thomas Fantini — décider dans la crise',externalId:'demo',payload:{viewCount:18420}}}] : clipCandidates
+  if (!demoClips.length) {
+    const hasText = transcriptCount > 0
+    return `<div class="page clips-page page-enter"><header class="page-head clips-head"><div><span>STUDIO / DÉRUSHAGE</span><h1>Extraits</h1></div></header><section class="clips-empty"><span>${icon('clip',28)}</span><small>${hasText?'TEXTES DISPONIBLES · TIMECODES ABSENTS':'MATIÈRE À RÉCUPÉRER'}</small><h2>${hasText?'Une dernière synchronisation pour retrouver chaque passage à la seconde près.':'Aneto doit entendre les vidéos avant de proposer des cuts.'}</h2><p>${hasText?'Les anciennes transcriptions ont été importées sans leurs repères temporels. La prochaine synchronisation les enrichira automatiquement.':'Autorise les transcriptions YouTube puis lance la synchronisation globale.'}</p><button id="sync-from-clips" ${bootstrap.sources.some(source=>source.state==='connected')?'':'disabled'}>${hasText?'Récupérer les timecodes':'Synchroniser les vidéos'} ${icon('sync',16)}</button></section></div>`
+  }
+  const retainedCount = demoClips.filter(clip=>clip.retention).length
+  return `<div class="page clips-page page-enter">
+    <header class="page-head clips-head"><div><span>STUDIO / DÉRUSHAGE</span><h1>Extraits</h1></div><div class="clips-counter"><strong>${demoClips.length}</strong><span>cuts<br>à examiner</span></div></header>
+    <section class="clips-manifesto"><span>ANETO A DÉJÀ DÉRUSHÉ</span><h2>Tu ne cherches plus dans les vidéos.<br>Tu choisis quoi publier.</h2><p>Chaque cut part d’un passage réellement prononcé. Le classement croise tension, fait concret, expérience vécue et durée adaptée${retainedCount ? ` avec les pics de rétention YouTube sur ${retainedCount} proposition${retainedCount>1?'s':''}` : ''}. Ce score aide à trier : il ne promet jamais un nombre de vues.</p></section>
+    <section class="clip-table"><div class="section-label"><span>SHORTS À PRÉPARER</span><em>Classés par force éditoriale du texte</em></div>${demoClips.slice(0,18).map((clip,index)=>clipCard(clip,index)).join('')}</section>
+  </div>`
+}
+
+function clipCard(clip,index) {
+  const watchUrl = clip.item.externalId === 'demo' ? '#' : `https://www.youtube.com/watch?v=${encodeURIComponent(clip.item.externalId)}&t=${clip.start}s`
+  return `<article class="clip-card"><div class="clip-rank"><span>${String(index+1).padStart(2,'0')}</span><strong>${clip.score}</strong><small>SCORE<br>DE CUT</small></div><div class="clip-source"><small>VIDÉO SOURCE</small><strong>${escapeHtml(clip.item.title)}</strong><span>${formatClipTime(clip.start)} → ${formatClipTime(clip.end)} · ${clip.duration} sec</span>${clip.retention?`<em>Rétention relative · ${Math.round(clip.retention.relativeRetentionPerformance*100)}/100</em>`:'<em>Classement sémantique · rétention à importer</em>'}</div><div class="clip-proposal"><small>TITRE PROPOSÉ</small><h2>${escapeHtml(clip.title)}</h2><div class="clip-hook"><span>HOOK</span><p>« ${escapeHtml(clip.hook)} »</p></div><blockquote>${escapeHtml(clip.excerpt)}</blockquote><div class="clip-reasons">${clip.reasons.map(reason=>`<span>${escapeHtml(reason)}</span>`).join('')}</div></div><div class="clip-actions">${clip.item.externalId==='demo'?'<button data-workflow="Créer 10 Shorts">Préparer le short</button>':`<a href="${watchUrl}" target="_blank" rel="noreferrer">Voir au bon moment ${icon('play',14)}</a><a class="secondary-link" href="/transcripts/${encodeURIComponent(clip.item.id)}">Lire la transcription ${icon('arrow',13)}</a>`}</div></article>`
 }
 
 async function commitCurrentDecision() {
@@ -318,6 +355,7 @@ function commandPalette() {
   const navigation = [
     ['today','Aujourd’hui','DÉCIDER'],
     ['intelligence','Intelligence','DÉCIDER'],
+    ['clips','Extraits','PRODUIRE'],
     ['graph','Connaissances','COMPRENDRE'],
     ['memory','Mémoire','COMPRENDRE'],
     ['research','Signaux','COMPRENDRE'],
@@ -386,7 +424,7 @@ function activateLivingLayer() {
 }
 
 function render() {
-  const views={today,intelligence,graph,memory,research}
+  const views={today,intelligence,clips,graph,memory,research}
   document.querySelector('#root').innerHTML=shell(views[state.view]())
   activateLivingLayer()
   bind()
@@ -412,6 +450,7 @@ function bind() {
   document.querySelector('#intent-input')?.addEventListener('click',commandPalette)
   document.querySelector('#global-search')?.addEventListener('click',commandPalette)
   document.querySelector('#sync-all')?.addEventListener('click',syncAllSources)
+  document.querySelector('#sync-from-clips')?.addEventListener('click',syncAllSources)
   document.querySelector('#commit-decision')?.addEventListener('click',commitCurrentDecision)
   document.querySelector('#prepare-episode')?.addEventListener('click',()=>{state.workflow='Créer un épisode';state.prepared=false;render()})
   document.querySelector('#prepare-workflow')?.addEventListener('click',()=>{state.prepared=true;render()})
@@ -421,7 +460,7 @@ function bind() {
 window.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();if(!document.querySelector('.command-wrap'))commandPalette()}
   if (!e.metaKey && !e.ctrlKey && !e.altKey && !['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)) {
-    const routes = { r:'research', g:'graph', m:'memory', i:'intelligence' }
+    const routes = { r:'research', g:'graph', m:'memory', i:'intelligence', e:'clips' }
     if (routes[e.key.toLowerCase()]) navigateToView(routes[e.key.toLowerCase()])
     if (isDemo && e.key.toLowerCase() === 'n') { state.workflow='Créer un épisode'; state.prepared=false; render() }
   }

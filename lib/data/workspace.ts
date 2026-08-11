@@ -1,5 +1,21 @@
 import { getConnectorConfiguration } from '@/lib/env'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { buildClipCandidates } from '@/src/clips.mjs'
+import { parseDurationSeconds } from '@/src/analytics.mjs'
+
+export type ClipCandidate = {
+  id: string
+  start: number
+  end: number
+  duration: number
+  score: number
+  editorialScore: number
+  retention: null | { audienceWatchRatio: number; relativeRetentionPerformance: number }
+  title: string
+  hook: string
+  excerpt: string
+  reasons: string[]
+}
 
 export type WorkspaceSnapshot = {
   mode: 'demo' | 'live'
@@ -20,7 +36,14 @@ export type WorkspaceSnapshot = {
     title: string
     publishedAt: string | null
     payload: Record<string, unknown>
-    transcript: null | { status: string; language: string | null; wordCount: number; keywords: string[] }
+    transcript: null | {
+      status: string
+      language: string | null
+      wordCount: number
+      keywords: string[]
+      timed: boolean
+      clips: ClipCandidate[]
+    }
   }>
   decisions: Array<{
     id: string
@@ -89,7 +112,7 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
     supabase.from('content_items').select('id, source_id, kind, external_id, title, published_at, payload').eq('organization_id', organizationId).order('published_at', { ascending: false }).limit(500),
     supabase.from('decisions').select('id, title, rationale, status, confidence, created_at').eq('organization_id', organizationId).order('created_at', { ascending: false }).limit(12),
     supabase.from('memory_events').select('id, event_type, source, confidence, observed_at, impact').eq('organization_id', organizationId).order('observed_at', { ascending: false }).limit(30),
-    supabase.from('content_transcripts').select('content_item_id, status, language, word_count, keywords').eq('organization_id', organizationId),
+    supabase.from('content_transcripts').select('content_item_id, status, language, word_count, keywords, provenance').eq('organization_id', organizationId),
   ])
 
   const firstError = [organizationResult.error, sourcesResult.error, contentResult.error, decisionsResult.error, memoryResult.error, transcriptsResult.error].find(Boolean)
@@ -122,7 +145,21 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
       payload: (item.payload ?? {}) as Record<string, unknown>,
       transcript: (() => {
         const transcript = transcriptsResult.data?.find((entry) => entry.content_item_id === item.id)
-        return transcript ? { status: transcript.status, language: transcript.language, wordCount: transcript.word_count ?? 0, keywords: transcript.keywords ?? [] } : null
+        const segments = Array.isArray(transcript?.provenance?.timed_segments) ? transcript.provenance.timed_segments : []
+        const retentionPoints = Array.isArray(transcript?.provenance?.retention_points) ? transcript.provenance.retention_points : []
+        return transcript ? {
+          status: transcript.status,
+          language: transcript.language,
+          wordCount: transcript.word_count ?? 0,
+          keywords: transcript.keywords ?? [],
+          timed: segments.length > 0,
+          clips: buildClipCandidates(segments, {
+            videoId: item.external_id,
+            limit: 3,
+            retentionPoints,
+            durationSeconds: parseDurationSeconds({ payload: item.payload }),
+          }),
+        } : null
       })(),
     })),
     decisions: (decisionsResult.data ?? []).map((decision) => ({

@@ -136,7 +136,7 @@ export async function processNextSyncRun() {
       const hasCaptionsScope = youtubeScopes.split(/\s+/).includes(YOUTUBE_CAPTIONS_SCOPE)
       const { data: existingTranscripts } = await admin
         .from('content_transcripts')
-        .select('content_item_id, status, updated_at')
+        .select('content_item_id, status, updated_at, provenance')
         .eq('organization_id', source.organization_id)
 
       const existingByContent = new Map((existingTranscripts ?? []).map((transcript) => [transcript.content_item_id, transcript]))
@@ -159,12 +159,16 @@ export async function processNextSyncRun() {
         const candidates = persistedItems.filter((item) => {
           const transcript = existingByContent.get(item.id)
           if (!transcript || transcript.status === 'authorization_required' || transcript.status === 'error') return true
+          if (transcript.status === 'available' && (!Array.isArray(transcript.provenance?.timed_segments) || !Array.isArray(transcript.provenance?.retention_points))) return true
           return transcript.status === 'unavailable' && new Date(transcript.updated_at).getTime() < staleUnavailable
         }).slice(0, 12)
 
         const transcriptRows = await Promise.all(candidates.map(async (item) => {
           try {
-            const transcript = await youtubeClient!.getTranscript(item.external_id)
+            const [transcript, retentionPoints] = await Promise.all([
+              youtubeClient!.getTranscript(item.external_id),
+              youtubeClient!.getAudienceRetention(item.external_id).catch(() => []),
+            ])
             return {
               organization_id: source.organization_id,
               content_item_id: item.id,
@@ -176,7 +180,7 @@ export async function processNextSyncRun() {
               plain_text: transcript.text,
               word_count: transcript.text ? transcript.text.split(/\s+/).filter(Boolean).length : 0,
               keywords: transcript.text ? extractTranscriptKeywords(transcript.text) : [],
-              provenance: { provider: 'youtube', endpoint: '/youtube/v3/captions', caption_last_updated: transcript.lastUpdated },
+              provenance: { provider: 'youtube', endpoint: '/youtube/v3/captions + youtubeanalytics/v2/reports', caption_last_updated: transcript.lastUpdated, timed_segments: transcript.segments, retention_points: retentionPoints },
               updated_at: syncedAt,
             }
           } catch (error) {

@@ -1,10 +1,12 @@
 import { ConnectorError } from './types'
 import type { NormalizedContentItem } from './types'
 import { normalizeYouTubeVideo, plainTextFromVtt } from '@/src/connectors/youtube.mjs'
+import { timedSegmentsFromVtt } from '@/src/clips.mjs'
 
 const GOOGLE_OAUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const YOUTUBE_API_URL = 'https://www.googleapis.com/youtube/v3'
+const YOUTUBE_ANALYTICS_API_URL = 'https://youtubeanalytics.googleapis.com/v2/reports'
 
 const scopes = [
   'https://www.googleapis.com/auth/youtube.readonly',
@@ -58,6 +60,11 @@ type YouTubeCaptionsResponse = {
   error?: { message?: string }
 }
 
+type YouTubeAnalyticsResponse = {
+  rows?: Array<[number, number, number]>
+  error?: { message?: string }
+}
+
 export type YouTubeTranscript = {
   status: 'available' | 'unavailable'
   text: string | null
@@ -65,6 +72,13 @@ export type YouTubeTranscript = {
   trackKind: string | null
   captionTrackId: string | null
   lastUpdated: string | null
+  segments: Array<{ start: number; end: number; text: string }>
+}
+
+export type YouTubeRetentionPoint = {
+  elapsedRatio: number
+  audienceWatchRatio: number
+  relativeRetentionPerformance: number
 }
 
 export function getYouTubeRedirectUri() {
@@ -252,12 +266,41 @@ export class YouTubeClient {
     return items
   }
 
+  async getAudienceRetention(videoId: string): Promise<YouTubeRetentionPoint[]> {
+    const endDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const params = new URLSearchParams({
+      ids: 'channel==MINE',
+      startDate: '2008-01-01',
+      endDate,
+      metrics: 'audienceWatchRatio,relativeRetentionPerformance',
+      dimensions: 'elapsedVideoTimeRatio',
+      filters: `video==${videoId}`,
+      maxResults: '200',
+    })
+    const response = await fetch(`${YOUTUBE_ANALYTICS_API_URL}?${params}`, {
+      headers: { Authorization: `Bearer ${this.accessToken}`, Accept: 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20_000),
+    })
+    const payload = await response.json() as YouTubeAnalyticsResponse
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) throw new ConnectorError(payload.error?.message ?? 'Les données de rétention YouTube ne sont pas accessibles.', 'unauthorized')
+      if (response.status === 429) throw new ConnectorError('Quota YouTube Analytics atteint.', 'rate_limited', 3600)
+      throw new ConnectorError(payload.error?.message ?? `YouTube Analytics a répondu avec le statut ${response.status}.`, 'upstream_error')
+    }
+    return (payload.rows ?? []).map(([elapsedRatio, audienceWatchRatio, relativeRetentionPerformance]) => ({
+      elapsedRatio: Number(elapsedRatio),
+      audienceWatchRatio: Number(audienceWatchRatio),
+      relativeRetentionPerformance: Number(relativeRetentionPerformance),
+    })).filter((point) => Object.values(point).every(Number.isFinite))
+  }
+
   async getTranscript(videoId: string): Promise<YouTubeTranscript> {
     const params = new URLSearchParams({ part: 'id,snippet', videoId })
     const captions = await this.request<YouTubeCaptionsResponse>(`/captions?${params}`)
     const tracks = (captions.items ?? []).filter((track) => track.id && track.snippet?.status !== 'failed')
     if (!tracks.length) {
-      return { status: 'unavailable', text: null, language: null, trackKind: null, captionTrackId: null, lastUpdated: null }
+      return { status: 'unavailable', text: null, language: null, trackKind: null, captionTrackId: null, lastUpdated: null, segments: [] }
     }
 
     const score = (track: (typeof tracks)[number]) => {
@@ -269,8 +312,9 @@ export class YouTubeClient {
     const track = [...tracks].sort((a, b) => score(b) - score(a))[0]
     const vtt = await this.requestText(`/captions/${encodeURIComponent(track.id!)}?tfmt=vtt`)
     const text = plainTextFromVtt(vtt)
+    const segments = timedSegmentsFromVtt(vtt)
     if (!text) {
-      return { status: 'unavailable', text: null, language: track.snippet?.language ?? null, trackKind: track.snippet?.trackKind ?? null, captionTrackId: track.id ?? null, lastUpdated: track.snippet?.lastUpdated ?? null }
+      return { status: 'unavailable', text: null, language: track.snippet?.language ?? null, trackKind: track.snippet?.trackKind ?? null, captionTrackId: track.id ?? null, lastUpdated: track.snippet?.lastUpdated ?? null, segments: [] }
     }
     return {
       status: 'available',
@@ -279,6 +323,7 @@ export class YouTubeClient {
       trackKind: track.snippet?.trackKind ?? null,
       captionTrackId: track.id ?? null,
       lastUpdated: track.snippet?.lastUpdated ?? null,
+      segments,
     }
   }
 }

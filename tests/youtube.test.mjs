@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { normalizeYouTubeVideo, plainTextFromVtt } from '../src/connectors/youtube.mjs'
+import { buildClipCandidates, formatClipTime, timedSegmentsFromVtt } from '../src/clips.mjs'
 
 test('normalizes a YouTube video and its public statistics', () => {
   const item = normalizeYouTubeVideo({
@@ -43,4 +44,55 @@ Bonjour &amp; bienvenue.
 Voici la suite.`)
 
   assert.equal(transcript, 'Bonjour & bienvenue.\nVoici la suite.')
+})
+
+test('preserves exact caption timecodes for video cuts', () => {
+  const segments = timedSegmentsFromVtt(`WEBVTT
+
+00:02:31.500 --> 00:02:34.000
+<c>J'ai failli tout perdre.</c>
+
+00:02:34.000 --> 00:02:38.250
+Mais cette erreur a changé mon entreprise.`)
+
+  assert.deepEqual(segments, [
+    { start: 151.5, end: 154, text: "J'ai failli tout perdre." },
+    { start: 154, end: 158.25, text: 'Mais cette erreur a changé mon entreprise.' },
+  ])
+  assert.equal(formatClipTime(151), '2:31')
+})
+
+test('ranks self-contained short candidates without inventing transcript text', () => {
+  const segments = Array.from({ length: 18 }, (_, index) => ({
+    start: index * 3,
+    end: index * 3 + 3,
+    text: index === 0
+      ? "J'ai failli perdre un million d'euros, mais cette erreur a changé toute ma manière de décider."
+      : `Voici la partie ${index} de cette histoire et ce que nous avons appris ensuite${index === 12 ? '.' : ''}`,
+  }))
+  const [candidate] = buildClipCandidates(segments, { videoId: 'video-1' })
+
+  assert.equal(candidate.start, 0)
+  assert.ok(candidate.duration >= 34 && candidate.duration <= 58)
+  assert.match(candidate.hook, /failli perdre un million/)
+  assert.ok(candidate.reasons.includes('tension narrative'))
+  assert.ok(candidate.excerpt.includes(segments[0].text))
+})
+
+test('combines semantic strength with measured retention when available', () => {
+  const segments = Array.from({ length: 14 }, (_, index) => ({
+    start: index * 3,
+    end: index * 3 + 3,
+    text: index === 0 ? "J'ai pris la décision la plus risquée de ma vie." : `La suite de cette décision numéro ${index}.`,
+  }))
+  const retentionPoints = Array.from({ length: 100 }, (_, index) => ({
+    elapsedRatio: (index + 1) / 100,
+    audienceWatchRatio: .82,
+    relativeRetentionPerformance: .91,
+  }))
+  const [candidate] = buildClipCandidates(segments, { videoId: 'video-2', durationSeconds: 42, retentionPoints })
+
+  assert.ok(candidate.retention)
+  assert.ok(Math.abs(candidate.retention.relativeRetentionPerformance - .91) < .0001)
+  assert.ok(candidate.reasons.includes('pic de rétention mesuré'))
 })

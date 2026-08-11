@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { analyzeContent, extractTopics, extractTranscriptKeywords, parseDurationSeconds, primaryMetric } from '../src/analytics.mjs'
+import { analyzeContent, editorialSignal, extractTopics, extractTranscriptKeywords, parseDurationSeconds, primaryMetric } from '../src/analytics.mjs'
 
 const videos = [
   { kind: 'video', provider: 'youtube', title: 'Créer une marque forte', payload: { viewCount: 1200, likeCount: 90, commentCount: 15, duration: 'PT12M30S', tags: ['Marque', 'Entrepreneuriat'] } },
@@ -33,4 +33,12 @@ test('aggregates real performance statistics', () => {
 
 test('extracts semantic keywords from a stored transcript', () => {
   assert.deepEqual(extractTranscriptKeywords('Média média stratégie. Une stratégie éditoriale pour le média.', 3), ['média', 'stratégie', 'éditoriale'])
+})
+
+test('rejects conversational filler before claiming an editorial topic', () => {
+  assert.deepEqual(extractTranscriptKeywords('Donc voilà, alors en fait, je pense vraiment que donc voilà.', 5), [])
+  const topics = extractTopics([{ transcript: { keywords: ['donc', 'voilà', 'entrepreneuriat'] }, payload: { tags: ['Dirigeant'] } }])
+  assert.deepEqual(topics, [{ label: 'entrepreneuriat', count: 1 }])
+  assert.equal(editorialSignal(topics), null)
+  assert.deepEqual(editorialSignal([{ label: 'entrepreneuriat', count: 2 }]), { label: 'entrepreneuriat', count: 2 })
 })

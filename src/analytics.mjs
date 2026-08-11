@@ -1,7 +1,17 @@
 const stopWords = new Set([
-  'avec', 'dans', 'pour', 'mais', 'plus', 'tout', 'tous', 'toutes', 'cette', 'comment', 'pourquoi', 'sans', 'chez',
-  'the', 'and', 'with', 'from', 'that', 'this', 'your', 'you', 'une', 'des', 'les', 'sur', 'est', 'sont', 'leur',
+  'alors', 'après', 'assez', 'aussi', 'autre', 'avant', 'avec', 'avoir', 'beaucoup', 'bien', 'bonne', 'cette', 'chez',
+  'chose', 'comme', 'comment', 'contre', 'dans', 'depuis', 'donc', 'elle', 'elles', 'encore', 'entre', 'être', 'faire',
+  'fait', 'fois', 'juste', 'leurs', 'mais', 'même', 'moins', 'notre', 'nous', 'parce', 'parfois', 'pendant', 'petit',
+  'pense', 'penser', 'peut', 'plus', 'pour', 'pourquoi', 'premier', 'quand', 'quelque', 'sans', 'savoir', 'sont', 'surtout', 'très',
+  'tous', 'toute', 'toutes', 'trouve', 'votre', 'vraiment', 'voilà', 'vous', 'allait', 'avait', 'c’est', 'dire', 'disons', 'était', 'genre', 'peuvent',
+  'the', 'and', 'with', 'from', 'that', 'this', 'your', 'you', 'une', 'des', 'les', 'sur', 'est', 'leur',
 ])
+
+const meaningfulTopic = (value) => {
+  const label = String(value ?? '').trim().replace(/^#/, '')
+  const key = label.toLocaleLowerCase('fr-FR')
+  return label.length >= 4 && !stopWords.has(key) && !/^\d+$/.test(key)
+}
 
 const finiteNumber = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
 
@@ -10,7 +20,7 @@ export function extractTranscriptKeywords(text, limit = 12) {
   String(text ?? '').split(/[^\p{L}\p{N}]+/u).forEach((raw) => {
     const word = raw.trim()
     const key = word.toLocaleLowerCase('fr-FR')
-    if (key.length < 4 || stopWords.has(key) || /^\d+$/.test(key)) return
+    if (!meaningfulTopic(key)) return
     const current = frequencies.get(key) ?? { label: key, count: 0 }
     current.count += 1
     frequencies.set(key, current)
@@ -37,20 +47,25 @@ export function extractTopics(items, limit = 6) {
   const add = (raw) => {
     const label = String(raw ?? '').trim().replace(/^#/, '')
     const key = label.toLocaleLowerCase('fr-FR')
-    if (label.length < 4 || stopWords.has(key) || /^\d+$/.test(key)) return
+    if (!meaningfulTopic(label)) return
     const current = topics.get(key) ?? { label, count: 0 }
     current.count += 1
     topics.set(key, current)
   }
 
   items.forEach((item) => {
-    const transcriptKeywords = Array.isArray(item?.transcript?.keywords) ? item.transcript.keywords : []
+    const transcriptKeywords = Array.isArray(item?.transcript?.keywords) ? item.transcript.keywords.filter(meaningfulTopic) : []
     const tags = transcriptKeywords.length ? transcriptKeywords : (Array.isArray(item?.payload?.tags) ? item.payload.tags : [])
     if (tags.length) tags.slice(0, 12).forEach(add)
     else String(item?.title ?? '').split(/[^\p{L}\p{N}]+/u).forEach(add)
   })
 
   return [...topics.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'fr')).slice(0, limit)
+}
+
+export function editorialSignal(topics, minimumOccurrences = 2) {
+  const topic = Array.isArray(topics) ? topics.find((entry) => meaningfulTopic(entry?.label) && Number(entry?.count) >= minimumOccurrences) : null
+  return topic ?? null
 }
 
 export function analyzeContent(items) {

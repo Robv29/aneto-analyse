@@ -1,5 +1,5 @@
 import { pathForView, viewForPath } from './navigation.mjs'
-import { analyzeContent, primaryMetric } from './analytics.mjs'
+import { analyzeContent, editorialSignal, primaryMetric } from './analytics.mjs'
 import { formatClipTime } from './clips.mjs'
 import { buildClipCopyText } from './openrouter.mjs'
 
@@ -179,16 +179,23 @@ function intelligence() {
     const top = analysis.top
     const transcriptRatio = transcriptCount / analysis.count
     const leadDelta = analysis.averagePrimary ? Math.round(((primaryMetric(top) / analysis.averagePrimary) - 1) * 100) : 0
-    const topic = analysis.topics[0]?.label ?? null
+    const topicEvidence = editorialSignal(analysis.topics)
+    const topic = topicEvidence?.label ?? null
     const topHref = contentHref(top)
     const maturity = transcriptCount === 0 ? 'bloqué' : transcriptRatio < .8 ? 'partiel' : analysis.count < 10 ? 'initial' : 'appris'
     const understanding = maturity === 'bloqué'
       ? 'Je vois ce qui marche. Je ne sais pas encore pourquoi.'
       : maturity === 'partiel'
-        ? `Un motif se dessine autour de « ${topic ?? 'tes meilleurs contenus'} ». La preuve reste incomplète.`
+        ? topic
+          ? `Un motif se dessine autour de « ${topic} », présent dans ${topicEvidence.count} contenus. La preuve reste incomplète.`
+          : 'Les textes deviennent exploitables, mais aucun sujet ne revient encore assez souvent pour constituer un signal.'
         : analysis.count < 10
-          ? `« ${topic ?? top.title} » est ton premier signal éditorial solide.`
-          : `Ton audience répond davantage aux contenus reliés à « ${topic ?? top.title} ».`
+          ? topic
+            ? `« ${topic} » est un premier motif récurrent, observé dans ${topicEvidence.count} contenus.`
+            : 'Aneto a identifié des passages forts, mais pas encore de récurrence éditoriale suffisamment démontrée.'
+          : topic
+            ? `Ton audience répond davantage aux contenus reliés à « ${topic} ».`
+            : 'Les performances sont mesurées, mais aucun territoire éditorial récurrent ne domine encore.'
     const decision = maturity === 'bloqué'
       ? {
           label:'ÉTAPE PRIORITAIRE',
@@ -220,7 +227,7 @@ function intelligence() {
       {label:'DÉRUSHAGE',value:`${clipCandidates.length}`,detail:clipCandidates.length ? `passages minutés dans ${timedTranscriptCount} vidéo${timedTranscriptCount>1?'s':''}.` : transcriptCount ? 'Resynchronisation nécessaire pour récupérer les timecodes.' : 'Aucun récit, hook ou passage encore lisible.'},
     ]
     const hypotheses = [
-      {label:'SUJET DOMINANT',value:topic ?? 'Non qualifié',state:transcriptCount ? 'Hypothèse issue des textes disponibles' : 'Métadonnées seulement'},
+      {label:'SUJET DOMINANT',value:topic ?? 'Non qualifié',state:topic ? `Présent dans ${topicEvidence.count} contenus · hypothèse à confirmer` : 'Aucune récurrence suffisante dans les textes'},
       {label:'FORMAT OBSERVÉ',value:formatDuration(analysis.averageDurationSeconds),state:'Durée moyenne, sans causalité démontrée'},
       {label:'ANTI-SIGNAL',value:analysis.ranked.at(-1)?.title ?? 'À apprendre',state:'À comparer après davantage de contenus'},
     ]

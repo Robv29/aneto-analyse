@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getWorkspaceSnapshot } from '@/lib/data/workspace'
 import { signOut } from '@/app/login/actions'
-import { connectAusha, enqueueAushaSync } from './actions'
+import { connectAusha, enqueueAushaSync, syncYouTubeNow } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,7 +82,11 @@ export default async function SettingsPage({
           </div>
           {youtube ? (
             <div>
-              <p>Autorisation Google active. Les accès sont limités à la lecture des vidéos et statistiques.</p>
+              <p>Dernière synchronisation : {youtube.lastSyncedAt ? new Date(youtube.lastSyncedAt).toLocaleString('fr-FR') : 'jamais'}</p>
+              <form action={syncYouTubeNow}>
+                <input type="hidden" name="sourceId" value={youtube.id} />
+                <button type="submit">Synchroniser les vidéos maintenant</button>
+              </form>
               <Link href="/api/oauth/youtube/start" className="connector-link">Renouveler l’autorisation YouTube</Link>
             </div>
           ) : (

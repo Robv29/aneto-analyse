@@ -7,6 +7,7 @@ import { AushaClient } from '@/lib/connectors/ausha'
 import { ConnectorError } from '@/lib/connectors/types'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { encryptCredential } from '@/src/security/credentials.mjs'
+import { processNextSyncRun } from '@/lib/sync/runner'
 
 const settingsUrl = (key: 'error' | 'success', message: string) => `/settings?${key}=${encodeURIComponent(message)}`
 
@@ -97,4 +98,36 @@ export async function enqueueAushaSync(formData: FormData) {
 
   revalidatePath('/settings')
   redirect(settingsUrl('success', 'Synchronisation Ausha ajoutée à la file.'))
+}
+
+export async function syncYouTubeNow(formData: FormData) {
+  const context = await getAuthenticatedOrganization()
+  if (!context) redirect('/login')
+  if (context.role === 'viewer') redirect(settingsUrl('error', 'Ton rôle ne permet pas de lancer une synchronisation.'))
+
+  const sourceId = String(formData.get('sourceId') ?? '')
+  const { data: source } = await context.supabase
+    .from('sources')
+    .select('id')
+    .eq('id', sourceId)
+    .eq('organization_id', context.organizationId)
+    .eq('provider', 'youtube')
+    .maybeSingle()
+  if (!source) redirect(settingsUrl('error', 'Source YouTube introuvable.'))
+
+  const { error } = await context.supabase.from('sync_runs').insert({
+    organization_id: context.organizationId,
+    source_id: source.id,
+    status: 'queued',
+    idempotency_key: `manual:${crypto.randomUUID()}`,
+  })
+  if (error) redirect(settingsUrl('error', 'La synchronisation YouTube n’a pas pu démarrer.'))
+
+  const result = await processNextSyncRun()
+  revalidatePath('/settings')
+  revalidatePath('/')
+  if (result.status === 'succeeded') {
+    redirect(settingsUrl('success', `${result.items} vidéo${result.items > 1 ? 's' : ''} synchronisée${result.items > 1 ? 's' : ''}.`))
+  }
+  redirect(settingsUrl('error', 'La synchronisation YouTube est en attente ou doit être relancée.'))
 }

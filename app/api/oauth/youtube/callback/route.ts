@@ -66,7 +66,14 @@ export async function GET(request: NextRequest) {
       throw new Error('credential_write_failed')
     }
 
-    return settingsRedirect('success', `${channel.title} est connectée à Aneto.`)
+    await admin.from('sync_runs').upsert({
+      organization_id: context.organizationId,
+      source_id: source.id,
+      status: 'queued',
+      idempotency_key: `connect:${channel.id}`,
+    }, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: true })
+
+    return settingsRedirect('success', `${channel.title} est connectée à Aneto. La première synchronisation est prête.`)
   } catch (error) {
     const message = error instanceof ConnectorError ? error.message : 'La connexion YouTube n’a pas pu être enregistrée.'
     return settingsRedirect('error', message)

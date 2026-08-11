@@ -1,3 +1,5 @@
+import { resolveOpenRouterModel } from '@/src/openrouter.mjs'
+
 export type ConnectorKey = 'ausha' | 'youtube' | 'instagram' | 'tiktok'
 
 type ConnectorConfig = {
@@ -42,7 +44,7 @@ export function getRuntimeStatus() {
     intelligence: {
       provider: 'openrouter' as const,
       status: has(process.env.OPENROUTER_API_KEY) ? 'configured' as const : 'not_configured' as const,
-      model: has(process.env.OPENROUTER_MODEL) ? process.env.OPENROUTER_MODEL : 'openrouter/free',
+      model: resolveOpenRouterModel(process.env.OPENROUTER_MODEL),
     },
     connectors: getConnectorConfiguration(),
     checkedAt: new Date().toISOString(),

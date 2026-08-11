@@ -1,5 +1,5 @@
 import 'server-only'
-import { extractOpenRouterJson, validateOpenRouterEditorial, validateOpenRouterMarketStudy } from '@/src/openrouter.mjs'
+import { extractOpenRouterJson, resolveOpenRouterModel, validateOpenRouterEditorial, validateOpenRouterMarketStudy } from '@/src/openrouter.mjs'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
@@ -70,7 +70,7 @@ export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
   })))
   if (!candidatePayload.length) return { clips: [] as EditorialClip[], marketStudy: null as EditorialMarketStudy | null, model: null }
 
-  const requestedModel = process.env.OPENROUTER_MODEL || 'openrouter/free'
+  const requestedModel = resolveOpenRouterModel(process.env.OPENROUTER_MODEL)
   const response = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers: {

@@ -1,6 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildClipCopyText, extractOpenRouterJson, validateOpenRouterEditorial, validateOpenRouterMarketStudy } from '../src/openrouter.mjs'
+import { buildClipCopyText, extractOpenRouterJson, resolveOpenRouterModel, validateOpenRouterEditorial, validateOpenRouterMarketStudy } from '../src/openrouter.mjs'
+
+test('routes retired or changing free variants through the available free pool', () => {
+  assert.equal(resolveOpenRouterModel('openai/gpt-oss-120b:free'), 'openrouter/free')
+  assert.equal(resolveOpenRouterModel('meta-llama/another-model:free'), 'openrouter/free')
+  assert.equal(resolveOpenRouterModel(undefined), 'openrouter/free')
+  assert.equal(resolveOpenRouterModel('openai/gpt-oss-120b'), 'openai/gpt-oss-120b')
+})
 
 test('accepts only editorial suggestions attached to real measured candidates', () => {
   const response = validateOpenRouterEditorial({ clips: [

@@ -11,6 +11,12 @@ const cleanHashtag = (value) => {
   return normalized.length > 1 ? `#${normalized}` : ''
 }
 
+export function resolveOpenRouterModel(value) {
+  const configured = clean(value, 160)
+  if (!configured || configured.endsWith(':free')) return 'openrouter/free'
+  return configured
+}
+
 export function extractOpenRouterJson(value) {
   const text = String(value ?? '')
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]

@@ -36,7 +36,10 @@ const contentHref = (item) => item?.transcript?.status === 'available'
   ? `/transcripts/${encodeURIComponent(item.id)}`
   : item?.provider === 'youtube'
     ? `https://www.youtube.com/watch?v=${encodeURIComponent(item.externalId)}`
-    : null
+    : item?.provider === 'tiktok' && item?.payload?.shareUrl
+      ? String(item.payload.shareUrl)
+      : null
+const providerLabel = (provider) => provider === 'youtube' ? 'YouTube' : provider === 'ausha' ? 'Ausha' : provider === 'tiktok' ? 'TikTok' : provider
 const analysis = analyzeContent(bootstrap.contentItems)
 const transcriptCount = bootstrap.contentItems.filter(item => item.transcript?.status === 'available').length
 const timedTranscriptCount = bootstrap.contentItems.filter(item => item.transcript?.timed).length
@@ -117,7 +120,7 @@ function today() {
   const firstName = bootstrap.viewer?.displayName?.split(' ')[0] || (isDemo ? 'Robin' : '')
   const connectedSources = bootstrap.sources.filter(source => source.state === 'connected')
   const latestSync = connectedSources.map(source => source.lastSyncedAt).filter(Boolean).sort().at(-1)
-  const sourceLabels = connectedSources.map(source => source.provider === 'youtube' ? 'YouTube' : source.provider === 'ausha' ? 'Ausha' : source.provider)
+  const sourceLabels = connectedSources.map(source => providerLabel(source.provider))
   const syncButton = !isDemo ? `<section class="sync-command ${state.syncing?'is-syncing':''}">
     <div class="sync-command-copy"><span>MISE À JOUR GLOBALE</span><p>${sourceLabels.length ? sourceLabels.join(' + ') : 'Connecte une première source dans les paramètres.'}</p></div>
     <button id="sync-all" type="button" ${state.syncing || !connectedSources.length ? 'disabled' : ''}>
@@ -135,9 +138,10 @@ function today() {
       const isVideo = item.provider === 'youtube' || item.kind === 'video'
       const metric = isVideo ? item.payload?.viewCount : item.payload?.downloadsCount
       const label = isVideo ? 'vues' : 'écoutes'
-      const transcriptStatus = item.transcript?.status === 'available' ? `TRANSCRIT · ${compactNumber(item.transcript.wordCount)} MOTS` : item.transcript?.status === 'authorization_required' ? 'TRANSCRIPTION À AUTORISER' : item.transcript ? 'SOUS-TITRES INDISPONIBLES' : 'TRANSCRIPTION EN ATTENTE'
-      const href = item.transcript ? `/transcripts/${encodeURIComponent(item.id)}` : isVideo ? `https://www.youtube.com/watch?v=${encodeURIComponent(item.externalId)}` : null
-      const row = `<span class="synced-content-index">${String(index+1).padStart(2,'0')}</span><span class="synced-content-copy"><small>${isVideo?'YOUTUBE · VIDÉO':'AUSHA · ÉPISODE'}${item.publishedAt?` · ${new Date(item.publishedAt).toLocaleDateString('fr-FR')}`:''} · ${transcriptStatus}</small><strong>${escapeHtml(item.title)}</strong></span><span class="synced-content-metric"><b>${compactNumber(metric)}</b><small>${label}</small></span>${icon(href?'arrow':'check',17)}`
+      const transcriptStatus = item.provider === 'tiktok' ? 'LÉGENDE + PERFORMANCES IMPORTÉES' : item.transcript?.status === 'available' ? `TRANSCRIT · ${compactNumber(item.transcript.wordCount)} MOTS` : item.transcript?.status === 'authorization_required' ? 'TRANSCRIPTION À AUTORISER' : item.transcript ? 'SOUS-TITRES INDISPONIBLES' : 'TRANSCRIPTION EN ATTENTE'
+      const href = contentHref(item)
+      const contentType = isVideo ? 'VIDÉO' : 'ÉPISODE'
+      const row = `<span class="synced-content-index">${String(index+1).padStart(2,'0')}</span><span class="synced-content-copy"><small>${providerLabel(item.provider).toUpperCase()} · ${contentType}${item.publishedAt?` · ${new Date(item.publishedAt).toLocaleDateString('fr-FR')}`:''} · ${transcriptStatus}</small><strong>${escapeHtml(item.title)}</strong></span><span class="synced-content-metric"><b>${compactNumber(metric)}</b><small>${label}</small></span>${icon(href?'arrow':'check',17)}`
       return href ? `<a href="${href}"${href.startsWith('http')?' target="_blank" rel="noreferrer"':''}>${row}</a>` : `<article>${row}</article>`
     }).join('')}</div>
   </section>` : !isDemo ? '<section class="synced-library is-empty"><div><span>CONTENUS SYNCHRONISÉS</span><h2>En attente du premier contenu.</h2></div><p>Lance la synchronisation globale juste au-dessus.</p></section>' : ''

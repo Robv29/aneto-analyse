@@ -1,6 +1,7 @@
 import 'server-only'
 import { AushaClient } from '@/lib/connectors/ausha'
 import { refreshYouTubeTokens, YouTubeClient, YOUTUBE_CAPTIONS_SCOPE, type YouTubeTokens } from '@/lib/connectors/youtube'
+import { refreshTikTokTokens, TikTokClient, type TikTokTokens } from '@/lib/connectors/tiktok'
 import { ConnectorError } from '@/lib/connectors/types'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { decryptCredential, encryptCredential } from '@/src/security/credentials.mjs'
@@ -88,6 +89,28 @@ export async function processNextSyncRun() {
       items = await youtubeClient.listVideos(source.external_account_id)
       kind = 'video'
       provenanceEndpoint = '/youtube/v3/playlistItems + /youtube/v3/videos'
+
+      const encrypted = encryptCredential(JSON.stringify(refreshed), encryptionKey)
+      const { error: updateCredentialError } = await admin.from('source_credentials').update({
+        ciphertext: encrypted.ciphertext,
+        iv: encrypted.iv,
+        auth_tag: encrypted.authTag,
+        updated_at: new Date().toISOString(),
+      }).eq('source_id', source.id)
+      if (updateCredentialError) throw updateCredentialError
+    } else if (source.provider === 'tiktok') {
+      let tokens: TikTokTokens
+      try {
+        tokens = JSON.parse(storedCredential) as TikTokTokens
+      } catch {
+        throw new ConnectorError('Identifiants TikTok illisibles.', 'invalid_credentials')
+      }
+      if (!tokens.refreshToken) throw new ConnectorError('Autorisation TikTok incomplète.', 'invalid_credentials')
+      const refreshed = await refreshTikTokTokens(tokens)
+      const tiktokClient = new TikTokClient(refreshed.accessToken)
+      items = await tiktokClient.listVideos(4)
+      kind = 'video'
+      provenanceEndpoint = '/v2/video/list/'
 
       const encrypted = encryptCredential(JSON.stringify(refreshed), encryptionKey)
       const { error: updateCredentialError } = await admin.from('source_credentials').update({

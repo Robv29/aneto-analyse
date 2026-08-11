@@ -5,7 +5,7 @@ import { processNextSyncRun } from '@/lib/sync/runner'
 
 export const maxDuration = 60
 
-const supportedProviders = new Set(['ausha', 'youtube'])
+const supportedProviders = new Set(['ausha', 'youtube', 'tiktok'])
 
 export async function POST(request: Request) {
   const requestOrigin = request.headers.get('origin')

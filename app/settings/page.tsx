@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getWorkspaceSnapshot } from '@/lib/data/workspace'
 import { signOut } from '@/app/login/actions'
-import { connectAusha, enqueueAushaSync, syncYouTubeNow } from './actions'
+import { connectAusha, enqueueAushaSync, syncTikTokNow, syncYouTubeNow } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +19,8 @@ export default async function SettingsPage({
   const youtube = snapshot.sources.find((source) => source.provider === 'youtube')
   const youtubeReady = snapshot.connectors.find((connector) => connector.key === 'youtube')?.configured
   const youtubeTranscriptionReady = youtube?.oauthScopes.includes('https://www.googleapis.com/auth/youtube.force-ssl')
+  const tiktok = snapshot.sources.find((source) => source.provider === 'tiktok')
+  const tiktokReady = snapshot.connectors.find((connector) => connector.key === 'tiktok')?.configured
 
   return (
     <main className="settings-page">
@@ -100,6 +102,36 @@ export default async function SettingsPage({
             <div>
               <p>Connexion officielle Google. Aneto lit les vidéos, statistiques et pistes de sous-titres, sans publier ni supprimer de contenu.</p>
               <Link href="/api/oauth/youtube/start" className="connector-link">Connecter ma chaîne YouTube</Link>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {snapshot.mode === 'live' ? (
+        <section className="settings-section connector-control">
+          <div>
+            <span>TIKTOK / OAUTH</span>
+            <h2>{tiktok ? 'Compte connecté' : 'Connecter @aneto.media'}</h2>
+          </div>
+          {tiktok ? (
+            <div>
+              <p>Dernière synchronisation : {tiktok.lastSyncedAt ? new Date(tiktok.lastSyncedAt).toLocaleString('fr-FR') : 'jamais'}</p>
+              <p className="connector-capability is-ready">Lecture seule · les 4 dernières vidéos publiques et leurs performances alimentent Aneto.</p>
+              <form action={syncTikTokNow}>
+                <input type="hidden" name="sourceId" value={tiktok.id} />
+                <button type="submit">Synchroniser TikTok maintenant</button>
+              </form>
+              <Link href="/api/oauth/tiktok/start" className="connector-link">Renouveler l’autorisation TikTok</Link>
+            </div>
+          ) : tiktokReady ? (
+            <div>
+              <p>Connexion officielle TikTok. Aneto récupère uniquement les 4 dernières vidéos publiques, leurs légendes et leurs performances.</p>
+              <Link href="/api/oauth/tiktok/start" className="connector-link">Connecter mon compte TikTok</Link>
+            </div>
+          ) : (
+            <div>
+              <p>Le connecteur est prêt côté Aneto. Il reste à enregistrer la clé et le secret de l’application TikTok dans Vercel.</p>
+              <small>URL de redirection à déclarer : https://aneto-analyse.vercel.app/api/oauth/tiktok/callback</small>
             </div>
           )}
         </section>

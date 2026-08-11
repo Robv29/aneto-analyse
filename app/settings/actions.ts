@@ -131,3 +131,35 @@ export async function syncYouTubeNow(formData: FormData) {
   }
   redirect(settingsUrl('error', 'La synchronisation YouTube est en attente ou doit être relancée.'))
 }
+
+export async function syncTikTokNow(formData: FormData) {
+  const context = await getAuthenticatedOrganization()
+  if (!context) redirect('/login')
+  if (context.role === 'viewer') redirect(settingsUrl('error', 'Ton rôle ne permet pas de lancer une synchronisation.'))
+
+  const sourceId = String(formData.get('sourceId') ?? '')
+  const { data: source } = await context.supabase
+    .from('sources')
+    .select('id')
+    .eq('id', sourceId)
+    .eq('organization_id', context.organizationId)
+    .eq('provider', 'tiktok')
+    .maybeSingle()
+  if (!source) redirect(settingsUrl('error', 'Source TikTok introuvable.'))
+
+  const { error } = await context.supabase.from('sync_runs').insert({
+    organization_id: context.organizationId,
+    source_id: source.id,
+    status: 'queued',
+    idempotency_key: `manual:${crypto.randomUUID()}`,
+  })
+  if (error) redirect(settingsUrl('error', 'La synchronisation TikTok n’a pas pu démarrer.'))
+
+  const result = await processNextSyncRun()
+  revalidatePath('/settings')
+  revalidatePath('/')
+  if (result.status === 'succeeded') {
+    redirect(settingsUrl('success', `${result.items} vidéo${result.items > 1 ? 's' : ''} TikTok synchronisée${result.items > 1 ? 's' : ''}.`))
+  }
+  redirect(settingsUrl('error', 'La synchronisation TikTok est en attente ou doit être relancée.'))
+}

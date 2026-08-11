@@ -51,6 +51,9 @@ export function createTikTokAuthorizationUrl(state: string) {
     response_type: 'code',
     redirect_uri: getTikTokRedirectUri(),
     state,
+    // Always show TikTok's consent screen. Otherwise TikTok may silently reuse
+    // an older grant that only contains user.info.basic and omit video.list.
+    disable_auto_auth: '1',
   })
   return `${TIKTOK_AUTHORIZE_URL}?${params}`
 }
@@ -88,13 +91,21 @@ async function tokenRequest(body: URLSearchParams, previous?: TikTokTokens) {
 
 export async function exchangeTikTokCode(code: string): Promise<TikTokTokens> {
   const { clientKey, clientSecret } = getOAuthCredentials()
-  return tokenRequest(new URLSearchParams({
+  const tokens = await tokenRequest(new URLSearchParams({
     client_key: clientKey,
     client_secret: clientSecret,
     code,
     grant_type: 'authorization_code',
     redirect_uri: getTikTokRedirectUri(),
   }))
+  const grantedScopes = new Set(tokens.scope.split(',').map((scope) => scope.trim()))
+  if (!grantedScopes.has('video.list')) {
+    throw new ConnectorError(
+      'TikTok n’a pas autorisé la lecture des vidéos. Reconnecte le compte et accepte « Read your public videos ».',
+      'scope_not_authorized',
+    )
+  }
+  return tokens
 }
 
 export async function refreshTikTokTokens(tokens: TikTokTokens): Promise<TikTokTokens> {

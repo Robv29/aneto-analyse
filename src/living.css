@@ -202,6 +202,13 @@
 .ai-editorial>button{min-width:190px;min-height:42px;border:0;border-radius:7px;background:#ecece5;color:#11120f;display:flex;align-items:center;justify-content:center;gap:9px;padding:11px 15px;font-size:9px;font-weight:700;cursor:pointer}
 .ai-editorial>button:disabled{opacity:.6;cursor:wait}
 .ai-editorial.is-working .ai-editorial-mark svg,.ai-editorial.is-working>button svg{animation:sync-spin 1.15s linear infinite}
+.clip-market-study{margin:-35px 0 70px;padding:28px;border:1px solid #30342c;background:linear-gradient(135deg,rgba(216,255,67,.045),rgba(255,255,255,.01) 55%)}
+.clip-market-study>.section-label{margin-bottom:22px}
+.clip-market-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0}
+.clip-market-grid article{min-height:115px;padding:0 24px;border-left:1px solid #30342c}
+.clip-market-grid article:first-child{padding-left:0;border-left:0}
+.clip-market-grid small{color:var(--lime);font:500 7px 'DM Mono';letter-spacing:1px}
+.clip-market-grid p{margin:13px 0 0;color:#b8bcb2;font-size:9px;line-height:1.65}
 .clip-table>.section-label{margin-bottom:0;padding-bottom:15px;border-bottom:1px solid #363a31}
 .clip-card{display:grid;grid-template-columns:86px minmax(180px,.52fr) minmax(340px,1fr) 170px;gap:26px;padding:30px 0;border-bottom:1px solid #292c26;transition:background .25s var(--ease-out),padding .25s var(--ease-out)}
 .clip-card:hover{margin:0 -18px;padding-left:18px;padding-right:18px;background:#10120f}
@@ -222,12 +229,21 @@
 .clip-hook p{margin:0;color:#e0e1da;font:500 13px/1.45 'Newsreader',serif}
 .clip-ai-rationale{display:flex;align-items:flex-start;gap:7px;margin:0 0 15px;color:#aeb3a7;font-size:8px;line-height:1.6}
 .clip-ai-rationale svg{flex:0 0 auto;margin-top:1px;color:var(--lime)}
+.clip-market-angle{margin:4px 0 16px;padding:12px 14px;border-left:2px solid var(--lime);background:#12150f}
+.clip-market-angle small,.clip-caption>small{color:#747a6f;font:500 6px 'DM Mono';letter-spacing:.9px}
+.clip-market-angle p{margin:7px 0 0;color:#c3c7bc;font-size:9px;line-height:1.55}
+.clip-caption{margin:0 0 18px;padding:14px;border:1px solid #2f332b;border-radius:6px;background:#0d0f0c}
+.clip-caption p{margin:9px 0 11px;color:#b7bbb0;font-size:9px;line-height:1.65}
+.clip-caption>div{display:flex;flex-wrap:wrap;gap:5px}
+.clip-caption>div span{color:#bcd650;font:500 7px 'DM Mono'}
+.clip-caption>em{display:block;margin-top:11px;color:#62675d;font:400 6px 'DM Mono';font-style:normal;text-transform:uppercase;letter-spacing:.6px}
 .clip-proposal blockquote{margin:0;color:#858a80;font-size:9px;line-height:1.7}
 .clip-proposal blockquote small{display:block;margin-bottom:6px;color:#62675d;font:500 6px 'DM Mono';letter-spacing:.8px}
 .clip-reasons{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
 .clip-reasons span{padding:5px 7px;border:1px solid #30342c;border-radius:999px;color:#8d9287;font:400 6px 'DM Mono';text-transform:uppercase;letter-spacing:.55px}
 .clip-actions{display:flex;flex-direction:column;justify-content:center;gap:8px}
 .clip-actions a,.clip-actions button{min-height:40px;border:0;border-radius:7px;background:#ecece5;color:#11120f;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 12px;font-size:8px;font-weight:700;text-decoration:none;cursor:pointer}
+.clip-actions .copy-clip{background:var(--lime);color:#11120f}
 .clip-actions .secondary-link{border:1px solid #30342c;background:transparent;color:#9da197}
 .clips-empty{max-width:850px;margin:12vh auto 0;padding:50px;border:1px solid #30342c;background:linear-gradient(135deg,#11130f,#0d0f0c)}
 .clips-empty>span{width:58px;height:58px;display:grid;place-items:center;margin-bottom:38px;border:1px solid #383c33;border-radius:50%;color:var(--lime)}
@@ -305,6 +321,8 @@
   .clip-preview-grid article{min-height:0;padding:24px 0}
   .clip-preview-grid article+article{padding-left:0;border-left:0;border-top:1px solid #292c26}
   .clip-preview-grid footer{margin-top:20px}
+  .clip-market-grid{grid-template-columns:1fr 1fr;gap:24px 0}
+  .clip-market-grid article:nth-child(3){padding-left:0;border-left:0}
   .clip-card{grid-template-columns:70px 1fr}
   .clip-source{grid-column:2}
   .clip-proposal{grid-column:2}
@@ -362,6 +380,10 @@
   .ai-editorial{grid-template-columns:36px 1fr;margin-bottom:48px}
   .ai-editorial-mark{width:36px;height:36px}
   .ai-editorial>button{grid-column:1/-1;width:100%}
+  .clip-market-study{margin-top:-22px;padding:22px}
+  .clip-market-grid{grid-template-columns:1fr;gap:0}
+  .clip-market-grid article,.clip-market-grid article:nth-child(3){min-height:0;padding:17px 0;border-left:0;border-top:1px solid #30342c}
+  .clip-market-grid article:first-child{padding-top:0;border-top:0}
 }
 @media(prefers-reduced-motion:reduce){
   .connection,.node circle,.scan-orbit>i,.signal-arrival,.sync-command-icon svg{animation:none!important}

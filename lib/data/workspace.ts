@@ -15,6 +15,11 @@ export type ClipCandidate = {
   hook: string
   publicationHook: string
   rationale: string | null
+  marketAngle: string | null
+  caption: string | null
+  targetAudience: string | null
+  hashtags: string[]
+  platformFit: string[]
   aiEnhanced: boolean
   excerpt: string
   reasons: string[]
@@ -47,6 +52,12 @@ export type WorkspaceSnapshot = {
       timed: boolean
       aiEnhanced: boolean
       aiModel: string | null
+      marketStudy: null | {
+        opportunity: string
+        audience: string
+        differentiation: string
+        marketSignal: string
+      }
       clips: ClipCandidate[]
     }
   }>
@@ -152,7 +163,7 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
         const transcript = transcriptsResult.data?.find((entry) => entry.content_item_id === item.id)
         const segments = Array.isArray(transcript?.provenance?.timed_segments) ? transcript.provenance.timed_segments : []
         const retentionPoints = Array.isArray(transcript?.provenance?.retention_points) ? transcript.provenance.retention_points : []
-        const aiClips: Array<{ candidateId?: string; title?: string; publicationHook?: string; rationale?: string }> = Array.isArray(transcript?.provenance?.ai_clips) ? transcript.provenance.ai_clips : []
+        const aiClips: Array<{ candidateId?: string; title?: string; publicationHook?: string; rationale?: string; marketAngle?: string; caption?: string; targetAudience?: string; hashtags?: string[]; platformFit?: string[] }> = Array.isArray(transcript?.provenance?.ai_clips) ? transcript.provenance.ai_clips : []
         const measuredClips = buildClipCandidates(segments, {
           videoId: item.external_id,
           limit: 8,
@@ -169,6 +180,11 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
             title: aiClip.title || measured.title,
             publicationHook: aiClip.publicationHook || measured.hook,
             rationale: aiClip.rationale || null,
+            marketAngle: aiClip.marketAngle || null,
+            caption: aiClip.caption || null,
+            targetAudience: aiClip.targetAudience || null,
+            hashtags: Array.isArray(aiClip.hashtags) ? aiClip.hashtags : [],
+            platformFit: Array.isArray(aiClip.platformFit) ? aiClip.platformFit : [],
             aiEnhanced: true,
           }]
         })
@@ -176,6 +192,11 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
           ...clip,
           publicationHook: clip.hook,
           rationale: null,
+          marketAngle: null,
+          caption: null,
+          targetAudience: null,
+          hashtags: [],
+          platformFit: [],
           aiEnhanced: false,
         }))
         return transcript ? {
@@ -186,6 +207,16 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
           timed: segments.length > 0,
           aiEnhanced: enrichedClips.length > 0,
           aiModel: typeof transcript.provenance?.ai_model === 'string' ? transcript.provenance.ai_model : null,
+          marketStudy: (() => {
+            const study = transcript.provenance?.ai_market_study
+            return study && typeof study === 'object'
+              && typeof study.opportunity === 'string'
+              && typeof study.audience === 'string'
+              && typeof study.differentiation === 'string'
+              && typeof study.marketSignal === 'string'
+              ? study
+              : null
+          })(),
           clips: [...enrichedClips, ...remainingClips].slice(0, 3),
         } : null
       })(),

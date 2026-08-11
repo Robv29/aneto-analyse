@@ -23,54 +23,81 @@ export async function POST(request: Request) {
 
   const [{ data: transcripts, error: transcriptError }, { data: contents, error: contentError }] = await Promise.all([
     admin.from('content_transcripts').select('id, content_item_id, provenance').eq('organization_id', context.organizationId).eq('status', 'available'),
-    admin.from('content_items').select('id, external_id, title, payload').eq('organization_id', context.organizationId).eq('kind', 'video'),
+    admin.from('content_items').select('id, external_id, title, published_at, payload').eq('organization_id', context.organizationId).eq('kind', 'video'),
   ])
   if (transcriptError || contentError) return NextResponse.json({ error: 'Les transcriptions ne peuvent pas être chargées.' }, { status: 500 })
 
   const contentById = new Map((contents ?? []).map((content) => [content.id, content]))
   const eligible = (transcripts ?? []).filter((transcript) => {
     const provenance = transcript.provenance ?? {}
-    return Array.isArray(provenance.timed_segments) && provenance.timed_segments.length && !Array.isArray(provenance.ai_clips)
-  }).slice(0, 3)
+    return Array.isArray(provenance.timed_segments) && provenance.timed_segments.length && provenance.ai_editorial_version !== 2
+  }).slice(0, 4)
   if (!eligible.length) return NextResponse.json({ ok: true, enriched: 0, message: 'Tous les extraits disponibles ont déjà été enrichis.' })
 
-  let enriched = 0
-  let lastError = ''
-  for (const transcript of eligible) {
+  const batches = eligible.flatMap((transcript) => {
     const content = contentById.get(transcript.content_item_id)
-    if (!content) continue
+    if (!content) return []
     const provenance = transcript.provenance ?? {}
     const candidates = buildClipCandidates(provenance.timed_segments, {
       videoId: content.external_id,
-      limit: 8,
+      limit: 5,
       retentionPoints: Array.isArray(provenance.retention_points) ? provenance.retention_points : [],
       durationSeconds: parseDurationSeconds({ payload: content.payload }),
     })
-    if (!candidates.length) continue
-    try {
-      const result = await enrichEditorialClips(content.title, candidates)
+    if (!candidates.length) return []
+    const payload = content.payload && typeof content.payload === 'object' ? content.payload : {}
+    return [{
+      transcript,
+      provenance,
+      video: {
+        contentItemId: content.id,
+        title: content.title,
+        publishedAt: content.published_at,
+        views: Number(payload.viewCount) || 0,
+        likes: Number(payload.likeCount) || 0,
+        comments: Number(payload.commentCount) || 0,
+        tags: Array.isArray(payload.tags) ? payload.tags.filter((tag: unknown): tag is string => typeof tag === 'string') : [],
+        candidates,
+      },
+    }]
+  })
+  if (!batches.length) return NextResponse.json({ ok: true, enriched: 0, message: 'Aucun passage minuté ne peut encore être analysé.' })
+
+  try {
+    // One click means one—and only one—OpenRouter request for the whole batch.
+    const result = await enrichEditorialClips(batches.map((batch) => batch.video))
+    const selectedByCandidate = new Map(result.clips.map((clip) => [clip.candidateId, clip]))
+    const enrichedAt = new Date().toISOString()
+    const updates = await Promise.all(batches.map(async ({ transcript, provenance, video }) => {
+      const clips = video.candidates.flatMap((candidate) => {
+        const selected = selectedByCandidate.get(candidate.id)
+        return selected ? [selected] : []
+      })
       const { error: updateError } = await admin.from('content_transcripts').update({
         provenance: {
           ...provenance,
-          ai_clips: result.clips,
+          ai_clips: clips,
+          ai_market_study: result.marketStudy,
+          ai_editorial_version: 2,
           ai_model: result.model,
-          ai_enriched_at: new Date().toISOString(),
+          ai_enriched_at: enrichedAt,
         },
-        updated_at: new Date().toISOString(),
+        updated_at: enrichedAt,
       }).eq('id', transcript.id).eq('organization_id', context.organizationId)
       if (updateError) throw updateError
-      enriched += 1
-    } catch (error) {
-      lastError = error instanceof Error ? error.message.slice(0, 180) : 'openrouter_error'
-    }
+      return 1
+    }))
+    const enriched = updates.reduce((sum, count) => sum + count, 0)
+    revalidatePath('/clips')
+    revalidatePath('/intelligence')
+    return NextResponse.json({
+      ok: true,
+      enriched,
+      requestCount: 1,
+      message: `Analyse terminée en 1 requête : ${result.clips.length} extrait${result.clips.length > 1 ? 's' : ''} retenu${result.clips.length > 1 ? 's' : ''} parmi ${batches.length} vidéo${batches.length > 1 ? 's' : ''}.`,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 180) : 'openrouter_error'
+    return NextResponse.json({ error: `OpenRouter n’a pas terminé l’analyse : ${message}` }, { status: 502 })
   }
-
-  if (!enriched && lastError) return NextResponse.json({ error: `OpenRouter n’a pas terminé l’analyse : ${lastError}` }, { status: 502 })
-  revalidatePath('/clips')
-  revalidatePath('/intelligence')
-  return NextResponse.json({
-    ok: true,
-    enriched,
-    message: `${enriched} vidéo${enriched>1?'s':''} enrichie${enriched>1?'s':''} par OpenRouter. Les meilleurs titres et hooks sont prêts.`,
-  })
 }

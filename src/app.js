@@ -28,10 +28,15 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>"]/g, character =
 const compactNumber = (value) => Number.isFinite(Number(value)) ? new Intl.NumberFormat('fr-FR', { notation:'compact', maximumFractionDigits:1 }).format(Number(value)) : '—'
 const formatDuration = (seconds) => seconds ? `${Math.floor(seconds/60)} min${seconds%60 ? ` ${seconds%60}s` : ''}` : '—'
 const metricLabel = (item) => item?.kind === 'video' ? 'vues' : 'écoutes'
+const contentHref = (item) => item?.transcript?.status === 'available'
+  ? `/transcripts/${encodeURIComponent(item.id)}`
+  : item?.provider === 'youtube'
+    ? `https://www.youtube.com/watch?v=${encodeURIComponent(item.externalId)}`
+    : null
 const analysis = analyzeContent(bootstrap.contentItems)
 const transcriptCount = bootstrap.contentItems.filter(item => item.transcript?.status === 'available').length
 
-const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini', syncing:false, syncMessage:null, syncTone:null }
+const state = { view:viewForPath(window.location.pathname), detail:null, workflow:null, prepared:false, selectedNode:'Thomas Fantini', syncing:false, syncMessage:null, syncTone:null, committingDecision:false, decisionMessage:null, currentDecision:null }
 
 const demoRecommendations = [
   {type:'PRIORITÉ', icon:'↗', tone:'lime', title:'Republier Thomas Fantini', note:'Une conversation de 2023 vient de redevenir pertinente.', confidence:'94 %', action:'Republication préparée', detail:'Le sujet « management de crise » progresse de 31 % cette semaine. L’épisode contient un passage jamais publié sur la décision à 160 000 €.'},
@@ -87,11 +92,15 @@ const graphNodes = [
 ]
 
 function shell(content) {
-  const nav=[['today','home','Aujourd’hui'],['intelligence','brain','Intelligence'],['graph','graph','Graph'],['memory','memory','Mémoire'],['research','radar','Research']]
+  const navGroups = [
+    { label:'DÉCIDER', items:[['today','home','Aujourd’hui'],['intelligence','brain','Intelligence']] },
+    { label:'COMPRENDRE', items:[['graph','graph','Connaissances'],['memory','memory','Mémoire'],['research','radar','Signaux']] },
+  ]
   const identity = bootstrap.viewer?.displayName || bootstrap.viewer?.email || 'Paramètres'
   const initials = bootstrap.viewer?.displayName?.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || '⚙'
   const demoBanner = isDemo ? '<div class="demo-banner"><strong>MODE DÉMO</strong><span>Les données visibles sont illustratives.</span><a href="/settings">Configurer le produit</a></div>' : ''
-  return `<div class="shell"><aside class="rail"><button class="logo" data-view="today" aria-label="Aneto">A</button><nav>${nav.map(([view,ic,label])=>`<button class="rail-button ${state.view===view?'active':''}" data-view="${view}" aria-label="${label}">${icon(ic)}<span>${label}</span></button>`).join('')}</nav><div class="rail-bottom"><button class="rail-button" id="global-search" aria-label="Rechercher">${icon('search')}<span>Rechercher</span></button><a class="avatar" href="/settings" aria-label="${identity}">${initials}</a></div></aside><main class="content">${demoBanner}${content}</main>${state.detail!==null?detailDrawer():''}${state.workflow?workflowPanel():''}</div>`
+  const navigation = navGroups.map(group=>`<section class="rail-section"><span class="rail-section-label">${group.label}</span>${group.items.map(([view,ic,label])=>`<button class="rail-button ${state.view===view?'active':''}" data-view="${view}" aria-label="${group.label} · ${label}">${icon(ic)}<span><b>${label}</b><small>${group.label.toLowerCase()}</small></span></button>`).join('')}</section>`).join('')
+  return `<div class="shell"><aside class="rail"><button class="logo" data-view="today" aria-label="Aneto">A</button><nav aria-label="Navigation principale">${navigation}</nav><div class="rail-bottom"><button class="rail-button" id="global-search" aria-label="Commander et rechercher">${icon('search')}<span><b>Commander</b><small>⌘ K</small></span></button><a class="rail-settings" href="/settings" aria-label="Réglages · ${identity}"><span class="avatar">${initials}</span><span><b>Réglages</b><small>Système</small></span></a></div></aside><main class="content">${demoBanner}${content}</main>${state.detail!==null?detailDrawer():''}${state.workflow?workflowPanel():''}</div>`
 }
 
 function today() {
@@ -158,18 +167,88 @@ function intelligence() {
   if (!isDemo && !analysis.count) return unavailableModule('MEDIA DNA™', 'Intelligence', 'Synchronise une première source pour calculer les performances réelles.')
   if (!isDemo) {
     const top = analysis.top
-    const dna = [
-      ['PORTÉE', `${compactNumber(analysis.totalPrimary)} vues`, `${analysis.count} contenus`],
-      ['MOYENNE', `${compactNumber(analysis.averagePrimary)} vues`, 'par contenu'],
-      ['ENGAGEMENT', `${analysis.engagementRate.toLocaleString('fr-FR', { maximumFractionDigits:1 })} %`, `${compactNumber(analysis.totalLikes + analysis.totalComments)} réactions`],
-      ['FORMAT', formatDuration(analysis.averageDurationSeconds), 'durée moyenne'],
-      ['SUJET', analysis.topics[0]?.label ?? 'À qualifier', analysis.topics[0] ? `${analysis.topics[0].count} occurrence${analysis.topics[0].count>1?'s':''}` : 'titres analysés'],
+    const transcriptRatio = transcriptCount / analysis.count
+    const leadDelta = analysis.averagePrimary ? Math.round(((primaryMetric(top) / analysis.averagePrimary) - 1) * 100) : 0
+    const topic = analysis.topics[0]?.label ?? null
+    const topHref = contentHref(top)
+    const maturity = transcriptCount === 0 ? 'bloqué' : transcriptRatio < .8 ? 'partiel' : analysis.count < 10 ? 'initial' : 'appris'
+    const understanding = maturity === 'bloqué'
+      ? 'Je vois ce qui marche. Je ne sais pas encore pourquoi.'
+      : maturity === 'partiel'
+        ? `Un motif se dessine autour de « ${topic ?? 'tes meilleurs contenus'} ». La preuve reste incomplète.`
+        : analysis.count < 10
+          ? `« ${topic ?? top.title} » est ton premier signal éditorial solide.`
+          : `Ton audience répond davantage aux contenus reliés à « ${topic ?? top.title} ».`
+    const decision = maturity === 'bloqué'
+      ? {
+          label:'ÉTAPE PRIORITAIRE',
+          title:'Donner à Aneto accès aux récits, émotions et passages forts.',
+          rationale:`Les performances de ${analysis.count} contenus sont mesurées, mais aucune transcription n’est exploitable. Sans le texte, Aneto ne peut pas distinguer un sujet d’un hook ou d’une émotion.`,
+          confidence:'COMPRÉHENSION BLOQUÉE',
+          href:'/settings',
+          cta:'Autoriser les transcriptions',
+        }
+      : {
+          label:'DÉCISION PRIORITAIRE',
+          title:`Réexaminer « ${top.title} » avant de produire un nouveau sujet.`,
+          rationale:`Ce contenu dépasse la moyenne de ${Math.max(0,leadDelta)} %${topic ? ` et renforce le signal « ${topic} »` : ''}. Aneto recommande d’en extraire d’abord la mécanique éditoriale réutilisable.`,
+          confidence:analysis.count < 10 ? 'SIGNAL INITIAL' : 'SIGNAL CONFIRMÉ',
+          href:topHref ?? '/',
+          cta:top.transcript?.status === 'available' ? 'Ouvrir la matière analysée' : 'Ouvrir le contenu source',
+        }
+    state.currentDecision = maturity === 'bloqué' ? null : { title:decision.title, rationale:decision.rationale, contentItemId:top.id }
+    const proofs = [
+      {label:'PERFORMANCE',value:`${compactNumber(primaryMetric(top))} ${metricLabel(top)}`,detail:leadDelta > 0 ? `+${leadDelta} % par rapport à la moyenne actuelle.` : 'Meilleur résultat de la bibliothèque actuelle.'},
+      {label:'RÉACTION',value:`${analysis.engagementRate.toLocaleString('fr-FR',{maximumFractionDigits:1})} %`,detail:`${compactNumber(analysis.totalLikes + analysis.totalComments)} réactions mesurées sur YouTube.`},
+      {label:'COMPRÉHENSION',value:`${transcriptCount} / ${analysis.count}`,detail:transcriptCount ? 'contenus dont le sens peut être analysé.' : 'Aucun récit, hook ou passage encore lisible.'},
     ]
-    const evidence = analysis.ranked.slice(0, 3)
-    return `<div class="page intelligence page-enter"><header class="page-head"><div><span>MEDIA DNA™ / DONNÉES RÉELLES</span><h1>Intelligence</h1></div><div class="learning"><i></i><span>Transcriptions disponibles<strong>${transcriptCount} / ${analysis.count}</strong></span></div></header><section class="prediction"><div class="prediction-label">CONTENU LE PLUS PERFORMANT</div><div class="prediction-main"><div><p>Le signal le plus fort est</p><h2>${escapeHtml(top.title)}</h2></div><div class="probability answer-probability"><strong>${compactNumber(primaryMetric(top))}</strong><small>${top.kind==='video'?'vues YouTube':'écoutes Ausha'}<br>synchronisées</small></div></div><div class="prediction-reason"><span>${icon('brain',17)}</span><p>Résultat calculé sur <strong>${analysis.count} contenus réels</strong>, ${compactNumber(analysis.totalLikes)} likes et ${compactNumber(analysis.totalComments)} commentaires. Les sujets utilisent les transcriptions lorsqu’elles sont disponibles.</p><button data-view="today">Voir les contenus ${icon('arrow',15)}</button></div></section><section class="dna"><div class="section-label"><span>TON ADN MESURÉ</span><em>Mis à jour à la dernière synchronisation</em></div><div class="dna-grid">${dna.map(([type,value,metric],i)=>`<div class="dna-trait"><span>0${i+1} · ${type}</span><strong>${escapeHtml(value)}</strong><em>${escapeHtml(metric)}</em></div>`).join('')}</div></section><section class="because"><span>LES 3 PREUVES LES PLUS FORTES</span><div class="evidence-line">${evidence.map((item,index)=>`<i class="${index===0?'now':''}"></i><article><small>${item.publishedAt?new Date(item.publishedAt).toLocaleDateString('fr-FR'):'DATE INCONNUE'}</small><strong>${escapeHtml(item.title)}</strong><p>${compactNumber(primaryMetric(item))} ${item.kind==='video'?'vues':'écoutes'} · ${compactNumber(item.payload?.likeCount)} likes · ${compactNumber(item.payload?.commentCount)} commentaires</p></article>`).join('')}</div></section></div>`
+    const hypotheses = [
+      {label:'SUJET DOMINANT',value:topic ?? 'Non qualifié',state:transcriptCount ? 'Hypothèse issue des textes disponibles' : 'Métadonnées seulement'},
+      {label:'FORMAT OBSERVÉ',value:formatDuration(analysis.averageDurationSeconds),state:'Durée moyenne, sans causalité démontrée'},
+      {label:'ANTI-SIGNAL',value:analysis.ranked.at(-1)?.title ?? 'À apprendre',state:'À comparer après davantage de contenus'},
+    ]
+    const loop = [
+      ['01','Comprendre',transcriptCount ? `${transcriptCount} transcription${transcriptCount>1?'s':''} exploitable${transcriptCount>1?'s':''}` : 'Autorisation requise',transcriptCount?'done':'blocked'],
+      ['02','Décider','Une priorité, fondée sur les données disponibles','active'],
+      ['03','Préparer','Hooks, extraits et textes après analyse sémantique','waiting'],
+      ['04','Mesurer','Comparer la publication à sa référence','waiting'],
+      ['05','Apprendre',`${bootstrap.memoryEvents.length} événement${bootstrap.memoryEvents.length>1?'s':''} déjà mémorisé${bootstrap.memoryEvents.length>1?'s':''}`,bootstrap.memoryEvents.length?'done':'waiting'],
+    ]
+    return `<div class="page intelligence intelligence-v2 page-enter">
+      <header class="page-head intelligence-head"><div><span>MEDIA DNA™ / RAISONNEMENT ÉDITORIAL</span><h1>Intelligence</h1></div><div class="learning intelligence-state ${maturity}"><i></i><span>Niveau de compréhension<strong>${maturity==='bloqué'?'À débloquer':maturity==='partiel'?'Partiel':maturity==='initial'?'Signal initial':'En apprentissage'}</strong></span></div></header>
+      <section class="understanding"><span>CE QU’ANETO A COMPRIS</span><h2>${escapeHtml(understanding)}</h2><p>${transcriptCount ? `${transcriptCount} transcription${transcriptCount>1?'s':''} alimente${transcriptCount>1?'nt':''} cette lecture. Aneto sépare les faits des hypothèses tant que la couverture reste incomplète.` : 'Les chiffres décrivent la performance. Les transcriptions permettront d’expliquer les sujets, les histoires, les émotions et les passages qui la provoquent.'}</p></section>
+      <section class="decision-card"><div class="decision-number">01</div><div class="decision-copy"><span>${decision.label}</span><h2>${escapeHtml(decision.title)}</h2><p>${escapeHtml(decision.rationale)}</p><em>${decision.confidence}</em>${state.decisionMessage?`<div class="decision-feedback" role="status">${escapeHtml(state.decisionMessage)}</div>`:''}</div><div class="decision-actions"><a href="${decision.href}"${decision.href.startsWith('http')?' target="_blank" rel="noreferrer"':''}>${decision.cta} ${icon('arrow',16)}</a>${maturity!=='bloqué'?`<button id="commit-decision" type="button" ${state.committingDecision?'disabled':''}>${state.committingDecision?'Mémorisation…':'Retenir cette décision'}</button>`:''}</div></section>
+      <section class="proofs"><div class="section-label"><span>POURQUOI CETTE DÉCISION</span><em>Faits observés · aucune prédiction inventée</em></div><div class="proof-grid">${proofs.map((proof,index)=>`<article><small>0${index+1} · ${proof.label}</small><strong>${escapeHtml(proof.value)}</strong><p>${escapeHtml(proof.detail)}</p></article>`).join('')}</div></section>
+      <section class="hypotheses"><div class="section-label"><span>MEDIA DNA EN APPRENTISSAGE</span><em>Ce qui peut encore changer</em></div>${hypotheses.map((item,index)=>`<article><span>0${index+1}</span><div><small>${item.label}</small><strong>${escapeHtml(item.value)}</strong></div><p>${escapeHtml(item.state)}</p></article>`).join('')}</section>
+      <section class="intelligence-loop"><div class="section-label"><span>LA BOUCLE DE VALEUR</span><em>Aneto progresse seulement si le résultat revient dans la mémoire</em></div><div class="loop-grid">${loop.map(([num,title,detail,status])=>`<article class="${status}"><span>${num}</span><i></i><strong>${title}</strong><small>${detail}</small></article>`).join('')}</div></section>
+    </div>`
   }
   const dna=[['SUJET','Transformation vécue','× 1,7'],['INVITÉ','Opérateur, pas expert','+ 24 %'],['ÉMOTION','Vulnérabilité','81 / 100'],['FORMAT','Conversation dense','48–62 min'],['PROMESSE','Contre-intuitive','× 2,1']]
   return `<div class="page intelligence page-enter"><header class="page-head"><div><span>MEDIA DNA™</span><h1>Intelligence</h1></div><div class="learning"><i></i><span>Confiance du modèle<strong>91 %</strong></span></div></header><section class="prediction"><div class="prediction-label">SI TU PUBLIAIS UN ÉPISODE AUJOURD’HUI</div><div class="prediction-main"><div><p>Le meilleur pari serait</p><h2>Un restaurateur qui a failli tout perdre,<br>puis a réinventé son management.</h2></div><div class="probability"><strong>78<span>%</span></strong><small>probabilité de<br>surperformance</small></div></div><div class="prediction-reason"><span>${icon('brain',17)}</span><p>Cette recommandation ne vient pas d’un prompt. Elle croise <strong>4 ans de mémoire</strong>, 286 publications, 31 400 commentaires et les signaux détectés cette nuit.</p><button id="prepare-episode">Tout préparer ${icon('arrow',15)}</button></div></section><section class="dna"><div class="section-label"><span>TON ADN ÉDITORIAL</span><em>Dernière évolution aujourd’hui, 03:42</em></div><div class="dna-grid">${dna.map(([type,value,metric],i)=>`<div class="dna-trait"><span>0${i+1} · ${type}</span><strong>${value}</strong><em>${metric}</em></div>`).join('')}</div></section><section class="because"><span>POURQUOI ANETO LE SAIT</span><div class="evidence-line"><i></i><article><small>12 JANVIER</small><strong>Miniature recadrée</strong><p>CTR +18 %. Le modèle augmente le poids du cadrage serré.</p></article><i></i><article><small>28 FÉVRIER</small><strong>Épisode “sans filtre”</strong><p>Rétention +31 %. La vulnérabilité devient un signal fort.</p></article><i class="now"></i><article><small>AUJOURD’HUI</small><strong>Signal « restaurant »</strong><p>La demande externe rejoint exactement ton Media DNA.</p></article></div></section></div>`
+}
+
+async function commitCurrentDecision() {
+  if (!state.currentDecision || state.committingDecision) return
+  state.committingDecision = true
+  state.decisionMessage = null
+  render()
+  try {
+    const response = await fetch('/api/decisions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(state.currentDecision),
+    })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || 'La décision n’a pas pu être mémorisée.')
+    state.committingDecision = false
+    state.decisionMessage = result.message
+    render()
+    window.setTimeout(()=>window.location.reload(), 900)
+  } catch (error) {
+    state.committingDecision = false
+    state.decisionMessage = error instanceof Error ? error.message : 'La décision n’a pas pu être mémorisée.'
+    render()
+  }
 }
 
 function graph() {
@@ -236,11 +315,17 @@ function workflowPanel() {
 }
 
 function commandPalette() {
-  const navigation = [['today','Aujourd’hui'],['intelligence','Intelligence'],['graph','Graph'],['memory','Mémoire'],['research','Research']]
+  const navigation = [
+    ['today','Aujourd’hui','DÉCIDER'],
+    ['intelligence','Intelligence','DÉCIDER'],
+    ['graph','Connaissances','COMPRENDRE'],
+    ['memory','Mémoire','COMPRENDRE'],
+    ['research','Signaux','COMPRENDRE'],
+  ]
   const suggestions = isDemo
     ? Object.keys(workflows).map(w=>`<button data-workflow="${w}">${w}${icon('arrow',15)}</button>`).join('')
-    : navigation.map(([view,label])=>`<button data-command-view="${view}">${label}${icon('arrow',15)}</button>`).join('')
-  const el=document.createElement('div'); el.className='command-wrap'; el.innerHTML=`<div class="command" role="dialog" aria-modal="true" aria-label="Recherche et commandes"><div class="command-input">${icon('spark')}<input autofocus placeholder="${isDemo?'Que veux-tu accomplir ?':'Rechercher une section'}"><kbd>ESC</kbd></div><p>SUGGESTIONS</p>${suggestions}<footer><span>${isDemo?'Aneto prépare. Tu décides.':'Navigation dans l’espace connecté.'}</span><span>↵ Ouvrir</span></footer></div>`; document.body.append(el); el.querySelector('input').focus(); el.onclick=e=>{if(e.target===el)el.remove()}; el.querySelectorAll('[data-workflow]').forEach(b=>b.onclick=()=>{state.workflow=b.dataset.workflow;el.remove();render()}); el.querySelectorAll('[data-command-view]').forEach(b=>b.onclick=()=>{el.remove();navigateToView(b.dataset.commandView)})
+    : navigation.map(([view,label,group])=>`<button data-command-view="${view}"><span><small>${group}</small>${label}</span>${icon('arrow',15)}</button>`).join('')
+  const el=document.createElement('div'); el.className='command-wrap'; el.innerHTML=`<div class="command" role="dialog" aria-modal="true" aria-label="Recherche et commandes"><div class="command-input">${icon('spark')}<input autofocus placeholder="${isDemo?'Que veux-tu accomplir ?':'Décider, comprendre ou retrouver…'}"><kbd>ESC</kbd></div><p>${isDemo?'SUGGESTIONS':'NAVIGATION CLASSÉE'}</p>${suggestions}<footer><span>${isDemo?'Aneto prépare. Tu décides.':'Décider · Comprendre · Administrer'}</span><span>↵ Ouvrir</span></footer></div>`; document.body.append(el); el.querySelector('input').focus(); el.onclick=e=>{if(e.target===el)el.remove()}; el.querySelectorAll('[data-workflow]').forEach(b=>b.onclick=()=>{state.workflow=b.dataset.workflow;el.remove();render()}); el.querySelectorAll('[data-command-view]').forEach(b=>b.onclick=()=>{el.remove();navigateToView(b.dataset.commandView)})
 }
 
 function activateLivingLayer() {
@@ -327,6 +412,7 @@ function bind() {
   document.querySelector('#intent-input')?.addEventListener('click',commandPalette)
   document.querySelector('#global-search')?.addEventListener('click',commandPalette)
   document.querySelector('#sync-all')?.addEventListener('click',syncAllSources)
+  document.querySelector('#commit-decision')?.addEventListener('click',commitCurrentDecision)
   document.querySelector('#prepare-episode')?.addEventListener('click',()=>{state.workflow='Créer un épisode';state.prepared=false;render()})
   document.querySelector('#prepare-workflow')?.addEventListener('click',()=>{state.prepared=true;render()})
   document.querySelector('#validate-action')?.addEventListener('click',e=>{e.currentTarget.innerHTML=`${icon('check',16)} Planifié pour mardi à 08:15`;e.currentTarget.classList.add('validated')})

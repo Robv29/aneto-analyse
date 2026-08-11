@@ -39,6 +39,12 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeYouTubeCode(code)
     const channel = await getAuthorizedYouTubeChannel(tokens.accessToken)
     const now = new Date().toISOString()
+    let encrypted: ReturnType<typeof encryptCredential>
+    try {
+      encrypted = encryptCredential(JSON.stringify(tokens), encryptionKey)
+    } catch {
+      return settingsRedirect('error', 'La clé de chiffrement Vercel est invalide. La chaîne n’a pas été enregistrée.')
+    }
     const { data: source, error: sourceError } = await admin.from('sources').upsert({
       organization_id: context.organizationId,
       provider: 'youtube',
@@ -48,7 +54,6 @@ export async function GET(request: NextRequest) {
     }, { onConflict: 'organization_id,provider,external_account_id' }).select('id').single()
     if (sourceError || !source) throw new Error('source_write_failed')
 
-    const encrypted = encryptCredential(JSON.stringify(tokens), encryptionKey)
     const { error: credentialError } = await admin.from('source_credentials').upsert({
       source_id: source.id,
       ciphertext: encrypted.ciphertext,

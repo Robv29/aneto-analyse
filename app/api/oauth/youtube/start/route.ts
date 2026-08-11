@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { getAuthenticatedOrganization } from '@/lib/auth/organization'
 import { createYouTubeAuthorizationUrl } from '@/lib/connectors/youtube'
+import { hasValidCredentialEncryptionKey } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,8 +15,8 @@ export async function GET() {
     settingsUrl.searchParams.set('error', 'Seul un administrateur peut connecter YouTube.')
     return NextResponse.redirect(settingsUrl)
   }
-  if (!process.env.ANETO_CREDENTIAL_ENCRYPTION_KEY) {
-    settingsUrl.searchParams.set('error', 'Le coffre de connexion n’est pas configuré sur Vercel.')
+  if (!hasValidCredentialEncryptionKey()) {
+    settingsUrl.searchParams.set('error', 'La clé de chiffrement Vercel est absente ou invalide.')
     return NextResponse.redirect(settingsUrl)
   }
 

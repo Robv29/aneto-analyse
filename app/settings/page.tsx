@@ -81,7 +81,10 @@ export default async function SettingsPage({
             <h2>{youtube ? 'Chaîne connectée' : 'Connecter une chaîne'}</h2>
           </div>
           {youtube ? (
-            <p>Autorisation Google active. Les accès sont limités à la lecture des vidéos et statistiques.</p>
+            <div>
+              <p>Autorisation Google active. Les accès sont limités à la lecture des vidéos et statistiques.</p>
+              <Link href="/api/oauth/youtube/start" className="connector-link">Renouveler l’autorisation YouTube</Link>
+            </div>
           ) : (
             <div>
               <p>Connexion officielle Google, en lecture seule. Aneto ne peut ni publier ni supprimer de vidéo.</p>

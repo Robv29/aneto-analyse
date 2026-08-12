@@ -21,6 +21,7 @@ export default async function SettingsPage({
   const youtubeTranscriptionReady = youtube?.oauthScopes.includes('https://www.googleapis.com/auth/youtube.force-ssl')
   const tiktok = snapshot.sources.find((source) => source.provider === 'tiktok')
   const tiktokReady = snapshot.connectors.find((connector) => connector.key === 'tiktok')?.configured
+  const tiktokVideoReady = tiktok?.oauthScopes.includes('video.list')
 
   return (
     <main className="settings-page">
@@ -116,12 +117,18 @@ export default async function SettingsPage({
           {tiktok ? (
             <div>
               <p>Dernière synchronisation : {tiktok.lastSyncedAt ? new Date(tiktok.lastSyncedAt).toLocaleString('fr-FR') : 'jamais'}</p>
-              <p className="connector-capability is-ready">Lecture seule · les 4 dernières vidéos publiques et leurs performances alimentent Aneto.</p>
-              <form action={syncTikTokNow}>
-                <input type="hidden" name="sourceId" value={tiktok.id} />
-                <button type="submit">Synchroniser TikTok maintenant</button>
-              </form>
-              <Link href="/api/oauth/tiktok/start" className="connector-link">Renouveler l’autorisation TikTok</Link>
+              <p className={tiktokVideoReady ? 'connector-capability is-ready' : 'connector-capability'}>
+                {tiktokVideoReady
+                  ? 'Autorisation vérifiée · lecture des 4 dernières vidéos publiques et de leurs performances.'
+                  : 'Autorisation incomplète · TikTok n’a pas accordé la permission video.list.'}
+              </p>
+              {tiktokVideoReady ? (
+                <form action={syncTikTokNow}>
+                  <input type="hidden" name="sourceId" value={tiktok.id} />
+                  <button type="submit">Synchroniser TikTok maintenant</button>
+                </form>
+              ) : null}
+              <Link href="/api/oauth/tiktok/start" className="connector-link">{tiktokVideoReady ? 'Renouveler l’autorisation TikTok' : 'Corriger l’autorisation TikTok'}</Link>
             </div>
           ) : tiktokReady ? (
             <div>

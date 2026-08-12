@@ -260,6 +260,20 @@ export async function processNextSyncRun() {
     if (!shouldRetry) {
       await admin.from('sources').update({ state: 'error', updated_at: new Date().toISOString() }).eq('id', run.source_id)
     }
-    return { status: shouldRetry ? 'retry_scheduled' as const : 'failed' as const, runId: run.id }
+    return {
+      status: shouldRetry ? 'retry_scheduled' as const : 'failed' as const,
+      runId: run.id,
+      errorCode: error instanceof ConnectorError ? error.code : 'sync_error',
+      errorMessage: safeMessage(error),
+    }
   }
+}
+
+export async function processSyncRunUntil(targetRunId: string, maxClaims = 12) {
+  for (let claim = 0; claim < maxClaims; claim += 1) {
+    const result = await processNextSyncRun()
+    if ('runId' in result && result.runId === targetRunId) return result
+    if (result.status === 'idle' || result.status === 'not_configured') break
+  }
+  return { status: 'pending' as const, runId: targetRunId }
 }

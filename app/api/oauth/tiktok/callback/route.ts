@@ -3,9 +3,11 @@ import { getAuthenticatedOrganization } from '@/lib/auth/organization'
 import { exchangeTikTokCode, TikTokClient } from '@/lib/connectors/tiktok'
 import { ConnectorError } from '@/lib/connectors/types'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
+import { processSyncRunUntil } from '@/lib/sync/runner'
 import { encryptCredential } from '@/src/security/credentials.mjs'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 const appUrl = () => process.env.ANETO_APP_URL ?? 'https://aneto-analyse.vercel.app'
 
@@ -63,14 +65,22 @@ export async function GET(request: NextRequest) {
       throw new Error('credential_write_failed')
     }
 
-    await admin.from('sync_runs').upsert({
+    const { data: queuedRun, error: queueError } = await admin.from('sync_runs').insert({
       organization_id: context.organizationId,
       source_id: source.id,
       status: 'queued',
-      idempotency_key: `connect:${account.id}`,
-    }, { onConflict: 'source_id,idempotency_key', ignoreDuplicates: true })
+      idempotency_key: `connect:${account.id}:${crypto.randomUUID()}`,
+    }).select('id').single()
+    if (queueError || !queuedRun) throw new Error('sync_queue_failed')
 
-    return settingsRedirect('success', `${account.displayName} est connecté à Aneto. Les 4 dernières vidéos sont prêtes à être synchronisées.`)
+    const syncResult = await processSyncRunUntil(queuedRun.id)
+    if (syncResult.status === 'succeeded') {
+      return settingsRedirect('success', `${account.displayName} est connecté à Aneto · ${syncResult.items} vidéo${syncResult.items > 1 ? 's' : ''} TikTok importée${syncResult.items > 1 ? 's' : ''}.`)
+    }
+    if (syncResult.status === 'failed') {
+      return settingsRedirect('error', `${account.displayName} est connecté, mais TikTok a refusé l’import : ${syncResult.errorMessage}`)
+    }
+    return settingsRedirect('success', `${account.displayName} est connecté. La synchronisation TikTok continue en arrière-plan.`)
   } catch (error) {
     const message = error instanceof ConnectorError ? error.message : 'La connexion TikTok n’a pas pu être enregistrée.'
     return settingsRedirect('error', message)

@@ -7,7 +7,7 @@ import { AushaClient } from '@/lib/connectors/ausha'
 import { ConnectorError } from '@/lib/connectors/types'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { encryptCredential } from '@/src/security/credentials.mjs'
-import { processNextSyncRun } from '@/lib/sync/runner'
+import { processSyncRunUntil } from '@/lib/sync/runner'
 
 const settingsUrl = (key: 'error' | 'success', message: string) => `/settings?${key}=${encodeURIComponent(message)}`
 
@@ -115,15 +115,15 @@ export async function syncYouTubeNow(formData: FormData) {
     .maybeSingle()
   if (!source) redirect(settingsUrl('error', 'Source YouTube introuvable.'))
 
-  const { error } = await context.supabase.from('sync_runs').insert({
+  const { data: queuedRun, error } = await context.supabase.from('sync_runs').insert({
     organization_id: context.organizationId,
     source_id: source.id,
     status: 'queued',
     idempotency_key: `manual:${crypto.randomUUID()}`,
-  })
-  if (error) redirect(settingsUrl('error', 'La synchronisation YouTube n’a pas pu démarrer.'))
+  }).select('id').single()
+  if (error || !queuedRun) redirect(settingsUrl('error', 'La synchronisation YouTube n’a pas pu démarrer.'))
 
-  const result = await processNextSyncRun()
+  const result = await processSyncRunUntil(queuedRun.id)
   revalidatePath('/settings')
   revalidatePath('/')
   if (result.status === 'succeeded') {
@@ -147,19 +147,22 @@ export async function syncTikTokNow(formData: FormData) {
     .maybeSingle()
   if (!source) redirect(settingsUrl('error', 'Source TikTok introuvable.'))
 
-  const { error } = await context.supabase.from('sync_runs').insert({
+  const { data: queuedRun, error } = await context.supabase.from('sync_runs').insert({
     organization_id: context.organizationId,
     source_id: source.id,
     status: 'queued',
     idempotency_key: `manual:${crypto.randomUUID()}`,
-  })
-  if (error) redirect(settingsUrl('error', 'La synchronisation TikTok n’a pas pu démarrer.'))
+  }).select('id').single()
+  if (error || !queuedRun) redirect(settingsUrl('error', 'La synchronisation TikTok n’a pas pu démarrer.'))
 
-  const result = await processNextSyncRun()
+  const result = await processSyncRunUntil(queuedRun.id)
   revalidatePath('/settings')
   revalidatePath('/')
   if (result.status === 'succeeded') {
     redirect(settingsUrl('success', `${result.items} vidéo${result.items > 1 ? 's' : ''} TikTok synchronisée${result.items > 1 ? 's' : ''}.`))
   }
-  redirect(settingsUrl('error', 'La synchronisation TikTok est en attente ou doit être relancée.'))
+  if (result.status === 'failed') {
+    redirect(settingsUrl('error', `TikTok a refusé la synchronisation : ${result.errorMessage}`))
+  }
+  redirect(settingsUrl('error', 'La synchronisation TikTok est encore en attente. Relance-la dans quelques secondes.'))
 }

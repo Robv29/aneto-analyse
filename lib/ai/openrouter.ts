@@ -31,6 +31,10 @@ export type EditorialClip = {
   marketAngle: string
   caption: string
   targetAudience: string
+  whyNow: string
+  risk: string
+  testHypothesis: string
+  scorecard: { hook: number; autonomy: number; tension: number; conversation: number; fidelity: number }
   hashtags: string[]
   platformFit: string[]
   rank: number
@@ -41,6 +45,8 @@ export type EditorialMarketStudy = {
   audience: string
   differentiation: string
   marketSignal: string
+  limits: string
+  nextTest: string
 }
 
 type OpenRouterPayload = {
@@ -70,6 +76,15 @@ export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
   })))
   if (!candidatePayload.length) return { clips: [] as EditorialClip[], marketStudy: null as EditorialMarketStudy | null, model: null }
 
+  const performances = videos.map((video) => video.views).filter((value) => value > 0).sort((a, b) => a - b)
+  const internalBenchmark = {
+    videos_comparees: videos.length,
+    passages_compares: candidatePayload.length,
+    vues_medianes: performances.length ? performances[Math.floor(performances.length / 2)] : 0,
+    vues_maximales: Math.max(0, ...performances),
+    reactions_totales: videos.reduce((sum, video) => sum + video.likes + video.comments, 0),
+  }
+
   const requestedModel = resolveOpenRouterModel(process.env.OPENROUTER_MODEL)
   const response = await fetch(OPENROUTER_URL, {
     method: 'POST',
@@ -87,25 +102,34 @@ export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
       messages: [
         {
           role: 'system',
-          content: `Tu es le directeur éditorial et stratège social media d’un média français premium. Ta mission n’est pas de résumer : tu dois comparer toute la bibliothèque fournie et choisir les rares passages capables de devenir des Shorts, Reels ou TikTok mémorables.
+          content: `Tu es un comité de sélection éditoriale composé de quatre regards contradictoires : rédacteur en chef, monteur short-form, stratège audience et fact-checker. Tu dois rendre une seule décision commune. Ta mission n’est ni de résumer ni d’encourager : tu dois éliminer la majorité des passages et défendre seulement ceux qui méritent réellement du temps de montage.
 
 Règles absolues :
 - n’invente jamais un fait, une citation, un timecode, une statistique, une tendance ni une émotion absente des données ;
-- distingue toujours les signaux mesurés de tes recommandations ;
-- les données constituent une étude de marché INTERNE à la chaîne, pas une preuve de tendance mondiale en temps réel ;
-- élimine les passages génériques, dépendants du contexte ou sans tension ;
-- une bonne sélection doit offrir une promesse claire dès les 2 premières secondes, une idée autonome, un enjeu humain et un potentiel de conversation ;
-- les hashtags sont des recommandations ciblées à tester : mélange sujet, audience, intention et format, sans spam ni hashtag générique vide ;
+- distingue explicitement fait mesuré, inférence éditoriale et hypothèse à tester ;
+- ce corpus est un benchmark INTERNE à la chaîne, jamais une étude du marché mondial ni une preuve de tendance en temps réel ;
+- refuse les faux signaux : mots de liaison, généralités, notoriété supposée, chiffres sans contexte et émotion non formulée ;
+- élimine tout passage dépendant des 30 secondes précédentes, sans transformation, sans tension ou dont le hook trahit la citation ;
+- note chaque finaliste de 0 à 10 sur hook immédiat, autonomie, tension, potentiel de conversation et fidélité au verbatim ;
+- cherche le meilleur contre-argument : pourquoi ce cut pourrait ne pas fonctionner ;
+- transforme chaque recommandation en test falsifiable avec une variable claire à observer ;
+- les hashtags ne sont jamais présentés comme « en vogue » sans source externe datée : ce sont des hypothèses de découvrabilité à tester ;
+- garde au maximum 4 extraits réellement distincts, même si davantage sont fournis ;
 - réponds uniquement en JSON valide.`,
         },
         {
           role: 'user',
-          content: `Analyse comparative unique — ${videos.length} vidéo${videos.length > 1 ? 's' : ''}, ${candidatePayload.length} passages réels :
+          content: `Analyse comparative unique.
+
+Benchmark interne mesuré :
+${JSON.stringify(internalBenchmark)}
+
+Passages réels :
 ${JSON.stringify(candidatePayload)}
 
 Travail demandé :
-1. Réalise une micro-étude du marché éditorial interne en une phrase précise par rubrique : thèmes qui semblent attirer l’audience, audience à viser, espace de différenciation d’Aneto, et signal à tester. Appuie-toi uniquement sur titres, tags, performances et transcriptions fournis.
-2. Mets tous les passages en concurrence. Garde au maximum 6 extraits, seulement si leur valeur est forte et distincte.
+1. Établis le diagnostic éditorial interne : opportunité, audience, différenciation, signal observé, limites des données et prochain test décisif. Une phrase dense par rubrique.
+2. Mets tous les passages en concurrence. Garde au maximum 4 finalistes. L’ordre du tableau clips est le classement final.
 3. Pour chaque extrait retenu, livre un véritable kit de publication :
    - candidate_id : identifiant exact fourni ;
    - title : titre net, spécifique, 70 caractères maximum, sans putaclic ;
@@ -113,12 +137,16 @@ Travail demandé :
    - rationale : raison concrète de couper ce passage plutôt qu’un autre ;
    - market_angle : tension, question ou territoire éditorial qui lui donne une place sur le marché ;
    - target_audience : personne précise à qui le publier ;
+   - why_now : raison de le publier maintenant, reliée uniquement au benchmark fourni ;
+   - risk : meilleur contre-argument expliquant pourquoi il pourrait échouer ;
+   - test_hypothesis : hypothèse falsifiable, formulée « Si…, alors…, mesuré par… » ;
+   - scorecard : notes entières de 0 à 10 pour hook, autonomy, tension, conversation, fidelity ;
    - caption : texte prêt à publier en français, 400 caractères maximum, fidèle au passage, avec une question finale naturelle ;
-   - hashtags : 5 à 8 hashtags ciblés et cohérents, écrits avec # ;
+   - hashtags : 4 à 6 hypothèses de découvrabilité ciblées, écrites avec #, sans prétendre qu’elles sont tendance ;
    - platform_fit : plateformes les plus adaptées parmi YouTube Shorts, Instagram Reels, TikTok.
 
 Format obligatoire :
-{"market_study":{"opportunity":"…","audience":"…","differentiation":"…","market_signal":"…"},"clips":[{"candidate_id":"…","title":"…","publication_hook":"…","rationale":"…","market_angle":"…","target_audience":"…","caption":"…","hashtags":["#…"],"platform_fit":["…"]}]}`,
+{"market_study":{"opportunity":"…","audience":"…","differentiation":"…","market_signal":"…","limits":"…","next_test":"…"},"clips":[{"candidate_id":"…","title":"…","publication_hook":"…","rationale":"…","market_angle":"…","target_audience":"…","why_now":"…","risk":"…","test_hypothesis":"…","scorecard":{"hook":0,"autonomy":0,"tension":0,"conversation":0,"fidelity":0},"caption":"…","hashtags":["#…"],"platform_fit":["…"]}]}`,
         },
       ],
     }),

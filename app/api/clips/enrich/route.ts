@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const contentById = new Map((contents ?? []).map((content) => [content.id, content]))
   const eligible = (transcripts ?? []).filter((transcript) => {
     const provenance = transcript.provenance ?? {}
-    return Array.isArray(provenance.timed_segments) && provenance.timed_segments.length && provenance.ai_editorial_version !== 2
+    return Array.isArray(provenance.timed_segments) && provenance.timed_segments.length && provenance.ai_editorial_version !== 3
   }).slice(0, 4)
   if (!eligible.length) return NextResponse.json({ ok: true, enriched: 0, message: 'Tous les extraits disponibles ont déjà été enrichis.' })
 
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
           ...provenance,
           ai_clips: clips,
           ai_market_study: result.marketStudy,
-          ai_editorial_version: 2,
+          ai_editorial_version: 3,
           ai_model: result.model,
           ai_enriched_at: enrichedAt,
         },

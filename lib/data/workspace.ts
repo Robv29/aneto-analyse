@@ -18,6 +18,10 @@ export type ClipCandidate = {
   marketAngle: string | null
   caption: string | null
   targetAudience: string | null
+  whyNow: string | null
+  risk: string | null
+  testHypothesis: string | null
+  scorecard: null | { hook: number; autonomy: number; tension: number; conversation: number; fidelity: number }
   hashtags: string[]
   platformFit: string[]
   aiEnhanced: boolean
@@ -57,6 +61,8 @@ export type WorkspaceSnapshot = {
         audience: string
         differentiation: string
         marketSignal: string
+        limits: string
+        nextTest: string
       }
       clips: ClipCandidate[]
     }
@@ -163,7 +169,7 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
         const transcript = transcriptsResult.data?.find((entry) => entry.content_item_id === item.id)
         const segments = Array.isArray(transcript?.provenance?.timed_segments) ? transcript.provenance.timed_segments : []
         const retentionPoints = Array.isArray(transcript?.provenance?.retention_points) ? transcript.provenance.retention_points : []
-        const aiClips: Array<{ candidateId?: string; title?: string; publicationHook?: string; rationale?: string; marketAngle?: string; caption?: string; targetAudience?: string; hashtags?: string[]; platformFit?: string[] }> = Array.isArray(transcript?.provenance?.ai_clips) ? transcript.provenance.ai_clips : []
+        const aiClips: Array<{ candidateId?: string; title?: string; publicationHook?: string; rationale?: string; marketAngle?: string; caption?: string; targetAudience?: string; whyNow?: string; risk?: string; testHypothesis?: string; scorecard?: { hook?: number; autonomy?: number; tension?: number; conversation?: number; fidelity?: number }; hashtags?: string[]; platformFit?: string[] }> = Array.isArray(transcript?.provenance?.ai_clips) ? transcript.provenance.ai_clips : []
         const measuredClips = buildClipCandidates(segments, {
           videoId: item.external_id,
           limit: 8,
@@ -183,6 +189,16 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
             marketAngle: aiClip.marketAngle || null,
             caption: aiClip.caption || null,
             targetAudience: aiClip.targetAudience || null,
+            whyNow: aiClip.whyNow || null,
+            risk: aiClip.risk || null,
+            testHypothesis: aiClip.testHypothesis || null,
+            scorecard: aiClip.scorecard && Object.values(aiClip.scorecard).every((score) => Number.isFinite(Number(score))) ? {
+              hook: Number(aiClip.scorecard.hook),
+              autonomy: Number(aiClip.scorecard.autonomy),
+              tension: Number(aiClip.scorecard.tension),
+              conversation: Number(aiClip.scorecard.conversation),
+              fidelity: Number(aiClip.scorecard.fidelity),
+            } : null,
             hashtags: Array.isArray(aiClip.hashtags) ? aiClip.hashtags : [],
             platformFit: Array.isArray(aiClip.platformFit) ? aiClip.platformFit : [],
             aiEnhanced: true,
@@ -195,6 +211,10 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
           marketAngle: null,
           caption: null,
           targetAudience: null,
+          whyNow: null,
+          risk: null,
+          testHypothesis: null,
+          scorecard: null,
           hashtags: [],
           platformFit: [],
           aiEnhanced: false,
@@ -214,6 +234,8 @@ export async function getWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
               && typeof study.audience === 'string'
               && typeof study.differentiation === 'string'
               && typeof study.marketSignal === 'string'
+              && typeof study.limits === 'string'
+              && typeof study.nextTest === 'string'
               ? study
               : null
           })(),

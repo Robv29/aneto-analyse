@@ -31,8 +31,15 @@ export function validateOpenRouterMarketStudy(payload) {
   const audience = clean(study.audience, 240)
   const differentiation = clean(study.differentiation, 320)
   const marketSignal = clean(study.market_signal, 320)
-  if (!opportunity || !audience || !differentiation || !marketSignal) return null
-  return { opportunity, audience, differentiation, marketSignal }
+  const limits = clean(study.limits, 320)
+  const nextTest = clean(study.next_test, 320)
+  if (!opportunity || !audience || !differentiation || !marketSignal || !limits || !nextTest) return null
+  return { opportunity, audience, differentiation, marketSignal, limits, nextTest }
+}
+
+const score10 = (value) => {
+  const score = Number(value)
+  return Number.isFinite(score) && score >= 0 && score <= 10 ? Math.round(score) : null
 }
 
 export function validateOpenRouterEditorial(payload, allowedIds) {
@@ -47,12 +54,22 @@ export function validateOpenRouterEditorial(payload, allowedIds) {
     const marketAngle = clean(item?.market_angle, 260)
     const caption = clean(item?.caption, 900)
     const targetAudience = clean(item?.target_audience, 180)
+    const whyNow = clean(item?.why_now, 260)
+    const risk = clean(item?.risk, 260)
+    const testHypothesis = clean(item?.test_hypothesis, 260)
     const hashtags = [...new Set(cleanList(item?.hashtags, 10, 40).map(cleanHashtag).filter(Boolean))]
     const platformFit = cleanList(item?.platform_fit, 3, 18)
-    if (!allowed.has(candidateId) || seen.has(candidateId) || title.length < 5 || publicationHook.length < 8 || rationale.length < 12 || marketAngle.length < 12 || caption.length < 20 || targetAudience.length < 5 || hashtags.length < 3) return []
+    const scorecard = {
+      hook: score10(item?.scorecard?.hook),
+      autonomy: score10(item?.scorecard?.autonomy),
+      tension: score10(item?.scorecard?.tension),
+      conversation: score10(item?.scorecard?.conversation),
+      fidelity: score10(item?.scorecard?.fidelity),
+    }
+    if (!allowed.has(candidateId) || seen.has(candidateId) || title.length < 5 || publicationHook.length < 8 || rationale.length < 12 || marketAngle.length < 12 || caption.length < 20 || targetAudience.length < 5 || whyNow.length < 12 || risk.length < 12 || testHypothesis.length < 12 || hashtags.length < 3 || Object.values(scorecard).some((score) => score === null)) return []
     seen.add(candidateId)
-    return [{ candidateId, title, publicationHook, rationale, marketAngle, caption, targetAudience, hashtags, platformFit, rank: index + 1 }]
-  }).slice(0, 6)
+    return [{ candidateId, title, publicationHook, rationale, marketAngle, caption, targetAudience, whyNow, risk, testHypothesis, scorecard, hashtags, platformFit, rank: index + 1 }]
+  }).slice(0, 4)
 }
 
 export function buildClipCopyText(clip) {

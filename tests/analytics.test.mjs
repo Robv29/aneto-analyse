@@ -36,9 +36,16 @@ test('extracts semantic keywords from a stored transcript', () => {
 })
 
 test('rejects conversational filler before claiming an editorial topic', () => {
-  assert.deepEqual(extractTranscriptKeywords('Donc voilà, alors en fait, je pense vraiment que donc voilà.', 5), [])
+  assert.deepEqual(extractTranscriptKeywords('Donc voilà, alors en fait, je pense vraiment qu’il faut, faudrait, parler et regarder.', 8), [])
   const topics = extractTopics([{ transcript: { keywords: ['donc', 'voilà', 'entrepreneuriat'] }, payload: { tags: ['Dirigeant'] } }])
   assert.deepEqual(topics, [{ label: 'entrepreneuriat', count: 1 }])
   assert.equal(editorialSignal(topics), null)
-  assert.deepEqual(editorialSignal([{ label: 'entrepreneuriat', count: 2 }]), { label: 'entrepreneuriat', count: 2 })
+  assert.equal(editorialSignal([{ label: 'entrepreneuriat', count: 2 }]), null)
+  assert.deepEqual(editorialSignal([{ label: 'entrepreneuriat', count: 3 }]), { label: 'entrepreneuriat', count: 3 })
+  assert.equal(editorialSignal([{ label: 'faut', count: 12 }]), null)
+  assert.equal(editorialSignal([{ label: 'faudrait', count: 8 }]), null)
+})
+
+test('does not reject meaningful nouns that resemble verb endings', () => {
+  assert.deepEqual(extractTranscriptKeywords('Portrait portrait stratégie', 2), ['portrait', 'stratégie'])
 })

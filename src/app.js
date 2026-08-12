@@ -198,14 +198,14 @@ function intelligence() {
       ? 'Je vois ce qui marche. Je ne sais pas encore pourquoi.'
       : maturity === 'partiel'
         ? topic
-          ? `Un motif se dessine autour de « ${topic} », présent dans ${topicEvidence.count} contenus. La preuve reste incomplète.`
+          ? `Le terme « ${topic} » revient dans ${topicEvidence.count} contenus. Sa signification éditoriale reste à qualifier.`
           : 'Les textes deviennent exploitables, mais aucun sujet ne revient encore assez souvent pour constituer un signal.'
         : analysis.count < 10
           ? topic
-            ? `« ${topic} » est un premier motif récurrent, observé dans ${topicEvidence.count} contenus.`
+            ? `Premier indice lexical : « ${topic} » revient dans ${topicEvidence.count} contenus, sans causalité démontrée.`
             : 'Aneto a identifié des passages forts, mais pas encore de récurrence éditoriale suffisamment démontrée.'
           : topic
-            ? `Ton audience répond davantage aux contenus reliés à « ${topic} ».`
+            ? `« ${topic} » revient dans ${topicEvidence.count} contenus. Son lien avec la performance reste à tester.`
             : 'Les performances sont mesurées, mais aucun territoire éditorial récurrent ne domine encore.'
     const decision = maturity === 'bloqué'
       ? {
@@ -226,7 +226,7 @@ function intelligence() {
         } : {
           label:'DÉCISION PRIORITAIRE',
           title:`Réexaminer « ${top.title} » avant de produire un nouveau sujet.`,
-          rationale:`Ce contenu dépasse la moyenne de ${Math.max(0,leadDelta)} %${topic ? ` et renforce le signal « ${topic} »` : ''}. Aneto recommande d’en extraire d’abord la mécanique éditoriale réutilisable.`,
+          rationale:`Ce contenu dépasse la moyenne de ${Math.max(0,leadDelta)} %${topic ? ` ; le terme « ${topic} » revient dans ${topicEvidence.count} contenus, sans causalité démontrée` : ''}. Aneto recommande d’en extraire d’abord la mécanique éditoriale réutilisable.`,
           confidence:analysis.count < 10 ? 'SIGNAL INITIAL' : 'SIGNAL CONFIRMÉ',
           href:topHref ?? '/',
           cta:top.transcript?.status === 'available' ? 'Ouvrir la matière analysée' : 'Ouvrir le contenu source',
@@ -238,7 +238,7 @@ function intelligence() {
       {label:'DÉRUSHAGE',value:`${clipCandidates.length}`,detail:clipCandidates.length ? `passages minutés dans ${timedTranscriptCount} vidéo${timedTranscriptCount>1?'s':''}.` : transcriptCount ? 'Resynchronisation nécessaire pour récupérer les timecodes.' : 'Aucun récit, hook ou passage encore lisible.'},
     ]
     const hypotheses = [
-      {label:'SUJET DOMINANT',value:topic ?? 'Non qualifié',state:topic ? `Présent dans ${topicEvidence.count} contenus · hypothèse à confirmer` : 'Aucune récurrence suffisante dans les textes'},
+      {label:'TERME RÉCURRENT',value:topic ?? 'Non qualifié',state:topic ? `${topicEvidence.count} contenus · indice lexical, pas une cause de performance` : 'Aucune récurrence lexicale suffisamment solide'},
       {label:'FORMAT OBSERVÉ',value:formatDuration(analysis.averageDurationSeconds),state:'Durée moyenne, sans causalité démontrée'},
       {label:'ANTI-SIGNAL',value:analysis.ranked.at(-1)?.title ?? 'À apprendre',state:'À comparer après davantage de contenus'},
     ]

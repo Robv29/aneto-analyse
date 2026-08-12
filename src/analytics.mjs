@@ -2,15 +2,21 @@ const stopWords = new Set([
   'alors', 'après', 'assez', 'aussi', 'autre', 'avant', 'avec', 'avoir', 'beaucoup', 'bien', 'bonne', 'cette', 'chez',
   'chose', 'comme', 'comment', 'contre', 'dans', 'depuis', 'donc', 'elle', 'elles', 'encore', 'entre', 'être', 'faire',
   'fait', 'fois', 'juste', 'leurs', 'mais', 'même', 'moins', 'notre', 'nous', 'parce', 'parfois', 'pendant', 'petit',
-  'pense', 'penser', 'peut', 'plus', 'pour', 'pourquoi', 'premier', 'quand', 'quelque', 'sans', 'savoir', 'sont', 'surtout', 'très',
-  'tous', 'toute', 'toutes', 'trouve', 'votre', 'vraiment', 'voilà', 'vous', 'allait', 'avait', 'c’est', 'dire', 'disons', 'était', 'genre', 'peuvent',
+  'pense', 'penses', 'pensent', 'penser', 'peut', 'plus', 'pour', 'pourquoi', 'premier', 'quand', 'quelque', 'sans', 'savoir', 'sont', 'surtout', 'très',
+  'tous', 'toute', 'toutes', 'trouve', 'trouves', 'trouver', 'votre', 'vraiment', 'voilà', 'vous', 'allait', 'aller', 'avait', 'c’est', 'dire', 'disons', 'était', 'genre', 'peuvent',
+  'faut', 'fallait', 'falloir', 'faudrait', 'faudra', 'dois', 'doit', 'doivent', 'devait', 'devoir', 'devrait',
+  'vais', 'vont', 'veut', 'veux', 'vouloir', 'voulait', 'sais', 'sait', 'savez', 'crois', 'croit',
+  'parle', 'parler', 'regarde', 'regarder', 'arrive', 'arriver', 'mettre', 'prend', 'prendre', 'donne', 'donner',
+  'gens', 'truc', 'trucs', 'moment', 'manière', 'exemple', 'question', 'quelqu’un', 'aujourd’hui',
   'the', 'and', 'with', 'from', 'that', 'this', 'your', 'you', 'une', 'des', 'les', 'sur', 'est', 'leur',
 ])
 
 const meaningfulTopic = (value) => {
   const label = String(value ?? '').trim().replace(/^#/, '')
   const key = label.toLocaleLowerCase('fr-FR')
-  return label.length >= 4 && !stopWords.has(key) && !/^\d+$/.test(key)
+  return label.length >= 4
+    && !stopWords.has(key)
+    && !/^\d+$/.test(key)
 }
 
 const finiteNumber = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
@@ -63,7 +69,7 @@ export function extractTopics(items, limit = 6) {
   return [...topics.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'fr')).slice(0, limit)
 }
 
-export function editorialSignal(topics, minimumOccurrences = 2) {
+export function editorialSignal(topics, minimumOccurrences = 3) {
   const topic = Array.isArray(topics) ? topics.find((entry) => meaningfulTopic(entry?.label) && Number(entry?.count) >= minimumOccurrences) : null
   return topic ?? null
 }

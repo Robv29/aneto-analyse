@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   const contentById = new Map((contents ?? []).map((content) => [content.id, content]))
   const eligible = (transcripts ?? []).filter((transcript) => {
     const provenance = transcript.provenance ?? {}
-    return Array.isArray(provenance.timed_segments) && provenance.timed_segments.length && provenance.ai_editorial_version !== 3
+    return Array.isArray(provenance.timed_segments) && provenance.timed_segments.length && provenance.ai_editorial_version !== 4
   }).slice(0, 4)
   if (!eligible.length) return NextResponse.json({ ok: true, enriched: 0, message: 'Tous les extraits disponibles ont déjà été enrichis.' })
 
@@ -66,11 +66,11 @@ export async function POST(request: Request) {
   if (!batches.length) return NextResponse.json({ ok: true, enriched: 0, message: 'Aucun passage minuté ne peut encore être analysé.' })
 
   try {
-    // One click means one—and only one—OpenRouter request for the whole batch.
     const result = await enrichEditorialClips(batches.map((batch) => batch.video))
     const selectedByCandidate = new Map(result.clips.map((clip) => [clip.candidateId, clip]))
+    const analyzedVideoIds = new Set(result.analyzedVideoIds)
     const enrichedAt = new Date().toISOString()
-    const updates = await Promise.all(batches.map(async ({ transcript, provenance, video }) => {
+    const updates = await Promise.all(batches.filter(({ video }) => analyzedVideoIds.has(video.contentItemId)).map(async ({ transcript, provenance, video }) => {
       const clips = video.candidates.flatMap((candidate) => {
         const selected = selectedByCandidate.get(candidate.id)
         return selected ? [selected] : []
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
           ...provenance,
           ai_clips: clips,
           ai_market_study: result.marketStudy,
-          ai_editorial_version: 3,
+          ai_editorial_version: 4,
           ai_model: result.model,
           ai_enriched_at: enrichedAt,
         },
@@ -95,8 +95,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       enriched,
-      requestCount: 1,
-      message: `Analyse terminée en 1 requête : ${result.clips.length} extrait${result.clips.length > 1 ? 's' : ''} retenu${result.clips.length > 1 ? 's' : ''} parmi ${batches.length} vidéo${batches.length > 1 ? 's' : ''}.`,
+      requestCount: result.requestCount,
+      succeeded: result.succeeded,
+      failed: result.failed,
+      message: result.failed
+        ? `${result.succeeded}/${result.requestCount} analyses terminées · ${result.clips.length} finaliste${result.clips.length > 1 ? 's' : ''} retenu${result.clips.length > 1 ? 's' : ''}. Les vidéos expirées pourront être relancées.`
+        : `${result.requestCount} analyse${result.requestCount > 1 ? 's' : ''} courte${result.requestCount > 1 ? 's' : ''} terminée${result.requestCount > 1 ? 's' : ''} · ${result.clips.length} finaliste${result.clips.length > 1 ? 's' : ''} retenu${result.clips.length > 1 ? 's' : ''}.`,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 180) : 'openrouter_error'

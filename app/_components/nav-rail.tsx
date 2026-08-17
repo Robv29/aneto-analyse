@@ -7,17 +7,16 @@ import { Icon } from './icons'
 import { CommandPalette } from './command-palette'
 
 const navGroups: Array<{ label: string; items: Array<[string, string, string]> }> = [
-  { label: 'PILOTER', items: [['/', 'home', 'Priorités'], ['/intelligence', 'brain', 'Analyses']] },
-  { label: 'PRODUIRE', items: [['/clips', 'clip', 'Shorts']] },
-  { label: 'EXPLORER', items: [['/graph', 'graph', 'Relations'], ['/memory', 'memory', 'Historique'], ['/research', 'radar', 'Veille']] },
+  { label: 'PILOTER', items: [['/', 'home', 'Aujourd’hui']] },
+  { label: 'PRODUIRE', items: [['/clips', 'clip', 'Shorts'], ['/library', 'memory', 'Contenus']] },
+  { label: 'SUIVRE', items: [['/memory', 'brain', 'Historique']] },
 ]
 
 const shortcuts: Record<string, string> = {
-  r: '/research',
-  g: '/graph',
-  m: '/memory',
-  i: '/intelligence',
-  e: '/clips',
+  a: '/',
+  s: '/clips',
+  c: '/library',
+  h: '/memory',
 }
 
 export function NavRail({ identity, initials }: { identity: string; initials: string }) {

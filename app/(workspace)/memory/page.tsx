@@ -55,8 +55,8 @@ export default async function MemoryPage() {
     <div className="page memory-page page-enter">
       <header className="page-head">
         <div>
-          <span>MÉMOIRE LONGUE</span>
-          <h1>Rien n’est oublié.</h1>
+          <span>HISTORIQUE / DÉCISIONS &amp; ÉVÉNEMENTS</span>
+          <h1>Historique</h1>
         </div>
         <div className="memory-count"><strong>{events.length}</strong><span>événements<br />chargés</span></div>
       </header>

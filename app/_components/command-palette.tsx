@@ -5,12 +5,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './icons'
 
 const entries: Array<{ path: string; label: string; group: string }> = [
-  { path: '/', label: 'Aujourd’hui', group: 'DÉCIDER' },
-  { path: '/intelligence', label: 'Intelligence', group: 'DÉCIDER' },
-  { path: '/clips', label: 'Extraits', group: 'PRODUIRE' },
-  { path: '/graph', label: 'Connaissances', group: 'COMPRENDRE' },
-  { path: '/memory', label: 'Mémoire', group: 'COMPRENDRE' },
-  { path: '/research', label: 'Signaux', group: 'COMPRENDRE' },
+  { path: '/', label: 'Aujourd’hui', group: 'PILOTER' },
+  { path: '/clips', label: 'Shorts', group: 'PRODUIRE' },
+  { path: '/library', label: 'Contenus', group: 'PRODUIRE' },
+  { path: '/memory', label: 'Historique', group: 'SUIVRE' },
   { path: '/settings', label: 'Paramètres', group: 'ADMINISTRER' },
 ]
 

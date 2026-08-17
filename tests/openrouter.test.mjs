@@ -2,13 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildClipCopyText, extractOpenRouterJson, resolveOpenRouterModel, validateOpenRouterEditorial, validateOpenRouterMarketStudy } from '../src/openrouter.mjs'
 
-test('refuses the free pool and pins a paid default model', () => {
-  assert.equal(resolveOpenRouterModel('openai/gpt-oss-120b:free'), 'anthropic/claude-haiku-4.5')
-  assert.equal(resolveOpenRouterModel('meta-llama/another-model:free'), 'anthropic/claude-haiku-4.5')
-  assert.equal(resolveOpenRouterModel('openrouter/free'), 'anthropic/claude-haiku-4.5')
-  assert.equal(resolveOpenRouterModel(undefined), 'anthropic/claude-haiku-4.5')
+test('routes free variants through the daily free pool and respects explicit paid models', () => {
+  assert.equal(resolveOpenRouterModel('openai/gpt-oss-120b:free'), 'openrouter/free')
+  assert.equal(resolveOpenRouterModel('meta-llama/another-model:free'), 'openrouter/free')
+  assert.equal(resolveOpenRouterModel('openrouter/free'), 'openrouter/free')
+  assert.equal(resolveOpenRouterModel(undefined), 'openrouter/free')
   assert.equal(resolveOpenRouterModel('openai/gpt-oss-120b'), 'openai/gpt-oss-120b')
-  assert.equal(resolveOpenRouterModel('anthropic/claude-sonnet-4.5'), 'anthropic/claude-sonnet-4.5')
+  assert.equal(resolveOpenRouterModel('anthropic/claude-haiku-4.5'), 'anthropic/claude-haiku-4.5')
 })
 
 test('accepts only editorial suggestions attached to real measured candidates', () => {

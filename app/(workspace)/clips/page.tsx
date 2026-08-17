@@ -26,7 +26,7 @@ export default async function ClipsPage() {
     return (
       <div className="page clips-page page-enter">
         <header className="page-head clips-head">
-          <div><span>STUDIO / DÉRUSHAGE</span><h1>Extraits</h1></div>
+          <div><span>SHORTS / DÉRUSHAGE</span><h1>Shorts</h1></div>
         </header>
         <section className="clips-empty">
           <span><Icon name="clip" size={28} /></span>
@@ -43,25 +43,20 @@ export default async function ClipsPage() {
     )
   }
 
+  const timedVideos = new Set(board.clips.map((clip) => clip.contentItemId)).size
+
   return (
     <div className="page clips-page page-enter">
       <header className="page-head clips-head">
-        <div><span>STUDIO / DÉRUSHAGE</span><h1>Extraits</h1></div>
+        <div><span>SHORTS / DÉRUSHAGE</span><h1>Shorts</h1></div>
         <div className="clips-counter"><strong>{board.clips.length}</strong><span>cuts<br />à examiner</span></div>
       </header>
-      <section className="clips-manifesto">
-        <span>ANETO A DÉJÀ DÉRUSHÉ</span>
-        <h2>Tu ne cherches plus dans les vidéos.<br />Tu choisis quoi tester.</h2>
-        <p>Chaque cut part d’un passage réellement prononcé. Le classement croise force éditoriale et, lorsqu’elle existe, rétention mesurée. Il sert à ordonner le visionnage — jamais à prédire des vues.</p>
-        <details className="score-guide">
-          <summary>Comment lire le score de cut ?</summary>
-          <div>
-            <p><strong>Sans rétention :</strong> 100 % texte — hook, contraste, expérience vécue, fait concret et durée.</p>
-            <p><strong>Avec rétention :</strong> 70 % force éditoriale, 20 % rétention relative, 10 % audience encore présente.</p>
-            <p><strong>Score IA :</strong> une seconde lecture contradictoire note hook, autonomie, tension, conversation et fidélité au verbatim.</p>
-          </div>
-        </details>
-      </section>
+      <div className="clips-stats">
+        <span><b>{board.clips.length}</b> passages minutés</span>
+        <span><b>{timedVideos}</b> vidéo{timedVideos > 1 ? 's' : ''} dérushée{timedVideos > 1 ? 's' : ''}</span>
+        <span><b>{board.aiClipCount}</b> analysés par l’IA</span>
+        {pendingCount ? <span><b>{pendingCount}</b> en attente d’analyse</span> : null}
+      </div>
       <EnrichClips aiClipCount={board.aiClipCount} pendingCount={pendingCount} />
       {board.marketStudy ? (
         <section className="clip-market-study">

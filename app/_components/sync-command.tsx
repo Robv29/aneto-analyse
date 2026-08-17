@@ -68,6 +68,47 @@ export function SyncCommand({ sourceLabels, connectedCount, latestSync }: SyncCo
   )
 }
 
+// Barre compacte du tableau de bord : un bouton, un statut, pas de section géante.
+export function SyncBar({ connectedCount, latestSync }: { connectedCount: number; latestSync: string | null }) {
+  const router = useRouter()
+  const [syncing, setSyncing] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [tone, setTone] = useState<'success' | 'error' | null>(null)
+  const [isRefreshing, startTransition] = useTransition()
+
+  const syncAll = async () => {
+    setSyncing(true)
+    setMessage(null)
+    setTone(null)
+    try {
+      const response = await fetch('/api/sync/all', { method: 'POST' })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'La synchronisation n’a pas pu démarrer.')
+      setMessage(result.message)
+      setTone(result.status === 'succeeded' ? 'success' : 'error')
+      startTransition(() => router.refresh())
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'La synchronisation n’a pas pu démarrer.')
+      setTone('error')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const busy = syncing || isRefreshing
+  return (
+    <div className="dash-syncbar">
+      <button type="button" onClick={syncAll} disabled={busy || !connectedCount}>
+        <Icon name="sync" size={14} />
+        {busy ? 'Synchronisation…' : 'Synchroniser'}
+      </button>
+      <span className={`dash-sync-status ${tone === 'success' ? 'is-success' : tone === 'error' ? 'is-error' : ''}`} role="status">
+        {message ?? (latestSync ? `Dernière mise à jour · ${new Date(latestSync).toLocaleString('fr-FR')}` : 'Aucune synchronisation terminée')}
+      </span>
+    </div>
+  )
+}
+
 export function SyncRetryButton({ label, disabled }: { label: string; disabled?: boolean }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)

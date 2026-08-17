@@ -88,30 +88,3 @@ export function ClipCard({ clip, index }: { clip: BoardClip; index: number }) {
   )
 }
 
-export function ClipPreview({ clips }: { clips: BoardClip[] }) {
-  return (
-    <section className="clip-preview">
-      <div className="section-label">
-        <span>LES CUTS À REGARDER D’ABORD</span>
-        <em>Texte exact · timecode exact · aucun extrait inventé</em>
-      </div>
-      <div className="clip-preview-grid">
-        {clips.map((clip, index) => (
-          <article key={clip.id}>
-            <span>{String(index + 1).padStart(2, '0')} · {clip.score}/100</span>
-            <small>{clip.contentTitle}</small>
-            <h3>{clip.title}</h3>
-            <p>« {clip.hook} »</p>
-            <footer>
-              <strong>{formatClipTime(clip.start)} → {formatClipTime(clip.end)}</strong>
-              <a href={`https://www.youtube.com/watch?v=${encodeURIComponent(clip.externalId)}&t=${clip.start}s`} target="_blank" rel="noreferrer">
-                Voir <Icon name="play" size={13} />
-              </a>
-            </footer>
-          </article>
-        ))}
-      </div>
-      <Link className="clip-preview-all" href="/clips">Voir tous les extraits <Icon name="arrow" size={15} /></Link>
-    </section>
-  )
-}

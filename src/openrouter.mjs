@@ -11,13 +11,16 @@ const cleanHashtag = (value) => {
   return normalized.length > 1 ? `#${normalized}` : ''
 }
 
-// Modèle payant par défaut : le pool gratuit d'OpenRouter est refusé, car sa
-// qualité est aléatoire et les offres gratuites conservent les données envoyées.
-export const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-haiku-4.5'
+// Choix produit : Aneto utilise le quota gratuit quotidien d'OpenRouter.
+// Les variantes ":free" nominatives sont régulièrement retirées du catalogue,
+// donc elles passent par le pool "openrouter/free" qui route vers les modèles
+// gratuits encore disponibles. Un modèle payant explicite reste respecté via
+// OPENROUTER_MODEL pour une qualité plus constante.
+export const DEFAULT_OPENROUTER_MODEL = 'openrouter/free'
 
 export function resolveOpenRouterModel(value) {
   const configured = clean(value, 160)
-  if (!configured || configured.endsWith(':free') || configured === 'openrouter/free') return DEFAULT_OPENROUTER_MODEL
+  if (!configured || configured.endsWith(':free')) return DEFAULT_OPENROUTER_MODEL
   return configured
 }
 

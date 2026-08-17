@@ -17,7 +17,7 @@ Copiez `.env.example` vers `.env.local` pour activer Supabase et les connecteurs
 - **Lecture ciblée** : chaque page charge uniquement ses données (`lib/data/loaders.ts`). Les extraits candidats sont matérialisés en base (`clip_candidates`) au moment de la synchronisation, jamais recalculés au rendu.
 - **Moteur de jobs** : la file `sync_runs` (claim SQL `FOR UPDATE SKIP LOCKED`) est drainée avec un budget temps par le cron nocturne et par les déclenchements manuels, scopés à l'organisation. Les runs abandonnés sont libérés par `release_stale_sync_runs`, l'historique est purgé par `purge_finished_sync_runs`.
 - **Synchronisation incrémentale** : YouTube relit les 100 vidéos les plus récentes et ne repagine au-delà que s'il découvre des vidéos inconnues ; TikTok pagine jusqu'à 60 vidéos.
-- **IA historisée** : chaque analyse éditoriale est stockée dans `ai_analyses` (modèle, version, extraits, étude de marché). Incrémenter `EDITORIAL_ANALYSIS_VERSION` relance l'analyse sans toucher aux données. Le pool gratuit OpenRouter est refusé : le modèle par défaut est `anthropic/claude-haiku-4.5` (surchargez `OPENROUTER_MODEL` avec un modèle payant précis).
+- **IA historisée** : chaque analyse éditoriale est stockée dans `ai_analyses` (modèle, version, extraits, étude de marché). Incrémenter `EDITORIAL_ANALYSIS_VERSION` relance l'analyse sans toucher aux données. Par défaut l'analyse utilise le quota gratuit quotidien d'OpenRouter (`openrouter/free`) ; renseignez un modèle payant précis dans `OPENROUTER_MODEL` pour une qualité plus constante.
 
 ## Authentification et données réelles
 

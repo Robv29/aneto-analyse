@@ -7,9 +7,9 @@ const contentSecurityPolicy = [
   // 'unsafe-eval' uniquement en développement : React s'en sert pour ses
   // outils de debug. Jamais en production.
   `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: https:",
-  "font-src 'self'",
+  "font-src 'self' https://fonts.gstatic.com",
   `connect-src 'self' https://*.supabase.co${process.env.NODE_ENV === 'development' ? ' ws: wss:' : ''}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",

@@ -80,6 +80,8 @@ export type BoardClip = {
 export type ClipBoard = {
   clips: BoardClip[]
   aiClipCount: number
+  publishedCount: number
+  publishedThisWeek: number
   marketStudy: null | {
     opportunity: string
     audience: string
@@ -209,37 +211,56 @@ type StoredAiClip = {
 }
 
 // Les extraits sont matérialisés en base à la synchronisation ; ici on ne fait
-// que les lire et fusionner l'enrichissement IA le plus récent. Aucun calcul.
+// que lire les propositions et fusionner les kits IA (tous lots confondus,
+// le plus récent gagne par candidate_key). Aucun calcul.
 export const getClipBoard = cache(async (workspace: ActiveWorkspace, limit = 60): Promise<ClipBoard> => {
-  const [candidatesResult, analysesResult] = await Promise.all([
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const [candidatesResult, analysesResult, publishedResult, publishedWeekResult] = await Promise.all([
     workspace.supabase
       .from('clip_candidates')
       .select('content_item_id, candidate_key, start_seconds, end_seconds, duration_seconds, score, editorial_score, retention, title, hook, excerpt, reasons')
       .eq('organization_id', workspace.organization.id)
+      .eq('status', 'proposed')
       .order('score', { ascending: false })
       .limit(limit),
     workspace.supabase
       .from('ai_analyses')
-      .select('content_item_id, version, model, clips, market_study')
+      .select('content_item_id, version, model, clips, market_study, created_at')
       .eq('organization_id', workspace.organization.id)
       .eq('kind', 'editorial_clips')
-      .order('version', { ascending: false }),
+      .eq('version', EDITORIAL_ANALYSIS_VERSION)
+      .order('created_at', { ascending: false }),
+    workspace.supabase
+      .from('clip_candidates')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', workspace.organization.id)
+      .eq('status', 'published'),
+    workspace.supabase
+      .from('clip_candidates')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', workspace.organization.id)
+      .eq('status', 'published')
+      .gte('published_at', weekAgo),
   ])
   const firstError = [candidatesResult.error, analysesResult.error].find(Boolean)
   if (firstError) throw new Error(`Extraits inaccessibles: ${firstError.message}`)
 
+  const publishedCount = publishedResult.count ?? 0
+  const publishedThisWeek = publishedWeekResult.count ?? 0
   const candidates = candidatesResult.data ?? []
-  if (!candidates.length) return { clips: [], aiClipCount: 0, marketStudy: null, aiModel: null }
+  if (!candidates.length) return { clips: [], aiClipCount: 0, publishedCount, publishedThisWeek, marketStudy: null, aiModel: null }
 
-  const latestAnalysisByContent = new Map<string, { version: number; model: string; clips: StoredAiClip[]; market_study: ClipBoard['marketStudy'] }>()
+  const kitByCandidateKey = new Map<string, StoredAiClip>()
+  const latestAnalysisByContent = new Map<string, { model: string; market_study: ClipBoard['marketStudy'] }>()
   for (const analysis of analysesResult.data ?? []) {
     if (!latestAnalysisByContent.has(analysis.content_item_id)) {
       latestAnalysisByContent.set(analysis.content_item_id, {
-        version: analysis.version,
         model: analysis.model,
-        clips: Array.isArray(analysis.clips) ? analysis.clips as StoredAiClip[] : [],
         market_study: analysis.market_study ?? null,
       })
+    }
+    for (const clip of Array.isArray(analysis.clips) ? analysis.clips as StoredAiClip[] : []) {
+      if (clip.candidateId && !kitByCandidateKey.has(clip.candidateId)) kitByCandidateKey.set(clip.candidateId, clip)
     }
   }
 
@@ -255,8 +276,7 @@ export const getClipBoard = cache(async (workspace: ActiveWorkspace, limit = 60)
   const clips: BoardClip[] = candidates.flatMap((candidate) => {
     const content = contentById.get(candidate.content_item_id)
     if (!content) return []
-    const analysis = latestAnalysisByContent.get(candidate.content_item_id)
-    const aiClip = analysis?.clips.find((clip) => clip.candidateId === candidate.candidate_key) ?? null
+    const aiClip = kitByCandidateKey.get(candidate.candidate_key) ?? null
     const scorecard = aiClip?.scorecard && Object.values(aiClip.scorecard).every((score) => Number.isFinite(Number(score))) ? {
       hook: Number(aiClip.scorecard.hook),
       autonomy: Number(aiClip.scorecard.autonomy),
@@ -299,24 +319,60 @@ export const getClipBoard = cache(async (workspace: ActiveWorkspace, limit = 60)
   return {
     clips,
     aiClipCount: clips.filter((clip) => clip.aiEnhanced).length,
+    publishedCount,
+    publishedThisWeek,
     marketStudy: topAnalysis?.market_study ?? null,
     aiModel: topAnalysis?.model ?? null,
   }
 })
 
+// Nombre d'extraits proposés qui n'ont pas encore leur kit de publication.
 export const getPendingAnalysisCount = cache(async (workspace: ActiveWorkspace): Promise<number> => {
   const [{ data: candidates }, { data: analyses }] = await Promise.all([
     workspace.supabase
       .from('clip_candidates')
-      .select('content_item_id')
-      .eq('organization_id', workspace.organization.id),
+      .select('candidate_key')
+      .eq('organization_id', workspace.organization.id)
+      .eq('status', 'proposed'),
     workspace.supabase
       .from('ai_analyses')
-      .select('content_item_id')
+      .select('clips')
       .eq('organization_id', workspace.organization.id)
       .eq('kind', 'editorial_clips')
       .eq('version', EDITORIAL_ANALYSIS_VERSION),
   ])
-  const analyzed = new Set((analyses ?? []).map((analysis) => analysis.content_item_id))
-  return new Set((candidates ?? []).map((candidate) => candidate.content_item_id).filter((id) => !analyzed.has(id))).size
+  const kitted = new Set<string>()
+  for (const analysis of analyses ?? []) {
+    for (const clip of Array.isArray(analysis.clips) ? analysis.clips as StoredAiClip[] : []) {
+      if (clip.candidateId) kitted.add(clip.candidateId)
+    }
+  }
+  return (candidates ?? []).filter((candidate) => !kitted.has(candidate.candidate_key)).length
+})
+
+export type StoredInsights = {
+  summary: string
+  insights: Array<{ finding: string; evidence: string; action: string }>
+  model: string
+  createdAt: string
+} | null
+
+// Dernière lecture « ce qui marche » produite par l'IA (toutes plateformes).
+export const getPatternInsights = cache(async (workspace: ActiveWorkspace): Promise<StoredInsights> => {
+  const { data } = await workspace.supabase
+    .from('ai_analyses')
+    .select('payload, model, created_at')
+    .eq('organization_id', workspace.organization.id)
+    .eq('kind', 'performance_insights')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const payload = data?.payload as { summary?: unknown; insights?: unknown } | undefined
+  if (!data || typeof payload?.summary !== 'string' || !Array.isArray(payload.insights)) return null
+  return {
+    summary: payload.summary,
+    insights: payload.insights as Array<{ finding: string; evidence: string; action: string }>,
+    model: data.model,
+    createdAt: data.created_at,
+  }
 })

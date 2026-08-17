@@ -80,7 +80,7 @@ export default async function TodayPage() {
         <div className="dash-kpi"><small>CONTENUS</small><strong>{analysis.count}</strong><span>{transcriptCount} transcrits</span></div>
         <div className="dash-kpi"><small>VUES CUMULÉES</small><strong>{compactNumber(analysis.totalViews)}</strong><span>{compactNumber(analysis.totalLikes + analysis.totalComments)} réactions</span></div>
         <div className="dash-kpi"><small>ENGAGEMENT</small><strong>{analysis.engagementRate.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %</strong><span>réactions / vues</span></div>
-        <div className="dash-kpi"><small>SHORTS PRÊTS</small><strong className="is-accent">{board.clips.length}</strong><span>{board.aiClipCount} analysés par l’IA</span></div>
+        <div className="dash-kpi"><small>SHORTS PUBLIÉS (7 J)</small><strong className="is-accent">{board.publishedThisWeek}<small style={{ fontSize: 13 }}>/5</small></strong><span>{board.clips.length} prêts à publier</span></div>
       </section>
 
       <div className="dash-main">
@@ -118,7 +118,7 @@ export default async function TodayPage() {
                       <span>{clip.contentTitle} · {formatClipTime(clip.start)} → {formatClipTime(clip.end)} · {clip.duration} s</span>
                     </div>
                     <div className="dash-short-actions">
-                      {clip.aiEnhanced && clip.caption ? <CopyClipButton text={buildClipCopyText(clip) as string} /> : null}
+                      {clip.aiEnhanced && clip.caption ? <CopyClipButton text={buildClipCopyText(clip) as string} clip={{ contentItemId: clip.contentItemId, candidateKey: clip.id }} /> : null}
                       <a href={`https://www.youtube.com/watch?v=${encodeURIComponent(clip.externalId)}&t=${clip.start}s`} target="_blank" rel="noreferrer">Voir</a>
                     </div>
                   </article>

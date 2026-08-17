@@ -6,6 +6,7 @@ import { Icon } from './icons'
 
 const entries: Array<{ path: string; label: string; group: string }> = [
   { path: '/', label: 'Aujourd’hui', group: 'PILOTER' },
+  { path: '/patterns', label: 'Patterns — ce qui marche', group: 'PILOTER' },
   { path: '/clips', label: 'Shorts', group: 'PRODUIRE' },
   { path: '/library', label: 'Contenus', group: 'PRODUIRE' },
   { path: '/memory', label: 'Historique', group: 'SUIVRE' },

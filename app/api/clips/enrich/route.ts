@@ -28,9 +28,10 @@ export async function POST(request: Request) {
     admin.from('clip_candidates')
       .select('content_item_id, candidate_key, start_seconds, end_seconds, score, excerpt, reasons')
       .eq('organization_id', context.organizationId)
+      .eq('status', 'proposed')
       .order('score', { ascending: false }),
     admin.from('ai_analyses')
-      .select('content_item_id')
+      .select('clips')
       .eq('organization_id', context.organizationId)
       .eq('kind', 'editorial_clips')
       .eq('version', EDITORIAL_ANALYSIS_VERSION),
@@ -39,10 +40,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Les extraits candidats ne peuvent pas être chargés.' }, { status: 500 })
   }
 
-  const alreadyAnalyzed = new Set((analyses ?? []).map((analysis) => analysis.content_item_id))
+  // Un extrait est « en attente » tant qu'aucun lot d'analyse ne contient son kit.
+  const kittedKeys = new Set<string>()
+  for (const analysis of analyses ?? []) {
+    for (const clip of Array.isArray(analysis.clips) ? analysis.clips as Array<{ candidateId?: string }> : []) {
+      if (clip.candidateId) kittedKeys.add(clip.candidateId)
+    }
+  }
   const byContent = new Map<string, typeof candidates>()
   for (const candidate of candidates ?? []) {
-    if (alreadyAnalyzed.has(candidate.content_item_id)) continue
+    if (kittedKeys.has(candidate.candidate_key)) continue
     const list = byContent.get(candidate.content_item_id) ?? []
     if (list.length < CANDIDATES_PER_VIDEO) list.push(candidate)
     byContent.set(candidate.content_item_id, list)
@@ -88,7 +95,7 @@ export async function POST(request: Request) {
   try {
     const result = await enrichEditorialClips(videos)
     if (result.analyses.length) {
-      const { error: insertError } = await admin.from('ai_analyses').upsert(result.analyses.map((analysis) => ({
+      const { error: insertError } = await admin.from('ai_analyses').insert(result.analyses.map((analysis) => ({
         organization_id: context.organizationId,
         content_item_id: analysis.contentItemId,
         kind: 'editorial_clips',
@@ -96,7 +103,7 @@ export async function POST(request: Request) {
         model: analysis.model,
         clips: analysis.clips,
         market_study: analysis.marketStudy,
-      })), { onConflict: 'content_item_id,kind,version' })
+      })))
       if (insertError) throw insertError
     }
     const finalists = result.analyses.reduce((sum, analysis) => sum + analysis.clips.length, 0)

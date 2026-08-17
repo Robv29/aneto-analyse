@@ -79,7 +79,22 @@ export function validateOpenRouterEditorial(payload, allowedIds) {
     if (!allowed.has(candidateId) || seen.has(candidateId) || title.length < 5 || publicationHook.length < 8 || caption.length < 20 || hashtags.length < 3 || Object.values(scorecard).some((score) => score === null)) return []
     seen.add(candidateId)
     return [{ candidateId, title, publicationHook, rationale, marketAngle, caption, targetAudience, whyNow, risk, testHypothesis, scorecard, hashtags, platformFit, rank: index + 1 }]
-  }).slice(0, 4)
+  }).slice(0, 6)
+}
+
+// Lecture « ce qui marche » : un résumé + 3 à 8 enseignements sourcés.
+export function validatePerformanceInsights(payload) {
+  const summary = clean(payload?.summary, 500)
+  const insights = Array.isArray(payload?.insights) ? payload.insights : []
+  const validated = insights.flatMap((item) => {
+    const finding = clean(item?.finding, 200)
+    const evidence = clean(item?.evidence, 300)
+    const action = clean(item?.action, 260)
+    if (finding.length < 8 || evidence.length < 8 || action.length < 8) return []
+    return [{ finding, evidence, action }]
+  }).slice(0, 8)
+  if (summary.length < 20 || validated.length < 3) return null
+  return { summary, insights: validated }
 }
 
 export function buildClipCopyText(clip) {

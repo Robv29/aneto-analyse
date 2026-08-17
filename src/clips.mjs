@@ -118,6 +118,12 @@ const reasonsFor = (text, duration) => {
   return reasons.slice(0, 4)
 }
 
+// options.excludeRanges : plages déjà proposées ([{start, end}]) — aucun
+// nouveau candidat ne chevauche une plage exclue (marge de 15 s).
+const overlapsExcluded = (start, end, excludeRanges) => Array.isArray(excludeRanges)
+  && excludeRanges.some((range) => Number.isFinite(range?.start) && Number.isFinite(range?.end)
+    && start < range.end + 15 && end > range.start - 15)
+
 export function buildClipCandidates(segments, options = {}) {
   const cues = Array.isArray(segments)
     ? segments.filter((segment) => Number.isFinite(segment?.start) && Number.isFinite(segment?.end) && segment.end > segment.start && segment.text)
@@ -146,6 +152,7 @@ export function buildClipCandidates(segments, options = {}) {
     const end = selected.at(-1).end
     const duration = end - start
     if (duration < 18) continue
+    if (overlapsExcluded(start, end, options.excludeRanges)) continue
     const text = selected.map((segment) => segment.text).filter((value, index, values) => value !== values[index - 1]).join(' ')
     const scoring = combinedScore(text, duration, start, end, options)
     const reasons = reasonsFor(text, duration)

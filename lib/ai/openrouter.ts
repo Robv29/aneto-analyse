@@ -1,5 +1,5 @@
 import 'server-only'
-import { extractOpenRouterJson, resolveOpenRouterModel, validateOpenRouterEditorial, validateOpenRouterMarketStudy } from '@/src/openrouter.mjs'
+import { extractOpenRouterJson, resolveOpenRouterModel, validateOpenRouterEditorial, validateOpenRouterMarketStudy, validatePerformanceInsights } from '@/src/openrouter.mjs'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
@@ -69,7 +69,7 @@ export const clipScorecardAverage = (clip: Pick<EditorialClip, 'scorecard'>) =>
   Object.values(clip.scorecard).reduce((sum, score) => sum + score, 0) / 5
 
 async function analyzeOneVideo(video: EditorialVideoInput, benchmark: Record<string, number>, apiKey: string) {
-  const candidatePayload = video.candidates.slice(0, 4).map((candidate) => ({
+  const candidatePayload = video.candidates.slice(0, 6).map((candidate) => ({
     candidate_id: candidate.id,
     timecode_secondes: { debut: candidate.start, fin: candidate.end },
     score_mesure: candidate.score,
@@ -89,7 +89,7 @@ async function analyzeOneVideo(video: EditorialVideoInput, benchmark: Record<str
     body: JSON.stringify({
       model: requestedModel,
       temperature: .4,
-      max_tokens: 2200,
+      max_tokens: 2600,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -187,4 +187,67 @@ export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
     succeeded: analyses.length,
     failed: selectedVideos.length - analyses.length,
   }
+}
+
+export type PerformanceInsights = {
+  summary: string
+  insights: Array<{ finding: string; evidence: string; action: string }>
+}
+
+// Lecture IA transverse : reçoit les statistiques agrégées calculées sur tous
+// les réseaux synchronisés et en tire ce qui marche le mieux.
+export async function analyzePerformancePatterns(patterns: unknown): Promise<{ result: PerformanceInsights; model: string }> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) throw new Error('openrouter_not_configured')
+
+  const requestedModel = resolveOpenRouterModel(process.env.OPENROUTER_MODEL)
+  const response = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': process.env.ANETO_APP_URL || 'https://aneto-analyse.vercel.app',
+      'X-Title': 'Aneto Media Intelligence',
+    },
+    body: JSON.stringify({
+      model: requestedModel,
+      temperature: .3,
+      max_tokens: 1400,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `Tu es un analyste growth pour créateurs de contenu. On te fournit des statistiques agrégées calculées sur les contenus réellement synchronisés d'un créateur (toutes plateformes confondues), avec pour chaque dimension la moyenne de vues et le "lift" par rapport à la médiane globale.
+
+RÈGLES
+- Tu n'utilises QUE les chiffres fournis. Aucune tendance externe, aucune invention.
+- Chaque enseignement cite son chiffre (evidence) : moyenne, lift ou effectif.
+- Si un effectif est faible (count < 3), l'enseignement le signale comme fragile.
+- Chaque enseignement se termine par une action concrète applicable à la prochaine publication.
+- Couvre en priorité : durée idéale, thèmes gagnants, type de hook de titre, hashtags, plateforme et jour si les données existent.
+
+Réponds uniquement en JSON valide :
+{"summary":"lecture d'ensemble en 2 phrases","insights":[{"finding":"…","evidence":"…","action":"…"}]}`,
+        },
+        {
+          role: 'user',
+          content: `Statistiques agrégées du créateur : ${JSON.stringify(patterns)}
+
+Donne 4 à 6 enseignements, du plus actionnable au moins actionnable.`,
+        },
+      ],
+    }),
+    cache: 'no-store',
+    signal: AbortSignal.timeout(55_000),
+  })
+  const payload = await response.json() as OpenRouterPayload
+  if (!response.ok) throw new Error(payload.error?.message ?? `openrouter_${response.status}`)
+  const rawContent = payload.choices?.[0]?.message?.content
+  const content = typeof rawContent === 'string'
+    ? rawContent
+    : Array.isArray(rawContent) ? rawContent.map((part) => part.text ?? '').join('') : ''
+  if (!content) throw new Error('openrouter_empty_response')
+  const result = validatePerformanceInsights(extractOpenRouterJson(content)) as PerformanceInsights | null
+  if (!result) throw new Error('openrouter_invalid_insights_response')
+  return { result, model: payload.model ?? requestedModel }
 }

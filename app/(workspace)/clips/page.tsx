@@ -4,6 +4,7 @@ import { ClipCard } from '../../_components/clip-card'
 import { DemoWelcome } from '../../_components/demo-welcome'
 import { EnrichClips } from '../../_components/enrich-clips'
 import { Icon } from '../../_components/icons'
+import { MoreShorts } from '../../_components/more-shorts'
 import { SyncRetryButton } from '../../_components/sync-command'
 
 export const dynamic = 'force-dynamic'
@@ -44,6 +45,7 @@ export default async function ClipsPage() {
   }
 
   const timedVideos = new Set(board.clips.map((clip) => clip.contentItemId)).size
+  const latestYouTubeVideo = library.find((item) => item.provider === 'youtube' && item.kind === 'video') ?? null
 
   return (
     <div className="page clips-page page-enter">
@@ -52,11 +54,14 @@ export default async function ClipsPage() {
         <div className="clips-counter"><strong>{board.clips.length}</strong><span>cuts<br />à examiner</span></div>
       </header>
       <div className="clips-stats">
-        <span><b>{board.clips.length}</b> passages minutés</span>
-        <span><b>{timedVideos}</b> vidéo{timedVideos > 1 ? 's' : ''} dérushée{timedVideos > 1 ? 's' : ''}</span>
-        <span><b>{board.aiClipCount}</b> analysés par l’IA</span>
+        <span><b>{board.publishedThisWeek}</b>/5 publiés cette semaine</span>
+        <span><b>{board.clips.length}</b> proposés</span>
+        <span><b>{board.aiClipCount}</b> avec kit IA</span>
         {pendingCount ? <span><b>{pendingCount}</b> en attente d’analyse</span> : null}
+        <span><b>{timedVideos}</b> vidéo{timedVideos > 1 ? 's' : ''} dérushée{timedVideos > 1 ? 's' : ''}</span>
+        {board.publishedCount ? <span><b>{board.publishedCount}</b> publiés au total</span> : null}
       </div>
+      <MoreShorts latestVideoTitle={latestYouTubeVideo?.title ?? null} />
       <EnrichClips aiClipCount={board.aiClipCount} pendingCount={pendingCount} />
       {board.marketStudy ? (
         <section className="clip-market-study">

@@ -34,12 +34,8 @@ export function ClipCard({ clip, index }: { clip: BoardClip; index: number }) {
           : <em>Classement sémantique · rétention à importer</em>}
       </div>
       <div className="clip-proposal">
-        <small>{clip.aiEnhanced ? 'TITRE DU COMITÉ IA' : 'TITRE PROPOSÉ'}</small>
+        <small>{clip.aiEnhanced ? 'TITRE RECOMMANDÉ' : 'TITRE PROPOSÉ'}</small>
         <h2>{clip.title}</h2>
-        <div className="clip-hook">
-          <span>{clip.aiEnhanced ? 'HOOK IA' : 'HOOK'}</span>
-          <p>{clip.publicationHook}</p>
-        </div>
         {clip.rationale ? <p className="clip-ai-rationale"><Icon name="spark" size={12} /> {clip.rationale}</p> : null}
         {hasEditorialKit ? (
           <>
@@ -79,7 +75,7 @@ export function ClipCard({ clip, index }: { clip: BoardClip; index: number }) {
         <div className="clip-reasons">{clip.reasons.map((reason) => <span key={reason}>{reason}</span>)}</div>
       </div>
       <div className="clip-actions">
-        {hasEditorialKit && copyText ? <CopyClipButton text={copyText} /> : null}
+        {hasEditorialKit && copyText ? <CopyClipButton text={copyText} clip={{ contentItemId: clip.contentItemId, candidateKey: clip.id }} /> : null}
         <a href={watchUrl} target="_blank" rel="noreferrer">Voir au bon moment <Icon name="play" size={14} /></a>
         <Link className="secondary-link" href={`/transcripts/${encodeURIComponent(clip.contentItemId)}`}>
           Lire la transcription <Icon name="arrow" size={13} />

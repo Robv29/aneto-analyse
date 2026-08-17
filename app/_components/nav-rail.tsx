@@ -7,13 +7,14 @@ import { Icon } from './icons'
 import { CommandPalette } from './command-palette'
 
 const navGroups: Array<{ label: string; items: Array<[string, string, string]> }> = [
-  { label: 'PILOTER', items: [['/', 'home', 'Aujourd’hui']] },
+  { label: 'PILOTER', items: [['/', 'home', 'Aujourd’hui'], ['/patterns', 'radar', 'Patterns']] },
   { label: 'PRODUIRE', items: [['/clips', 'clip', 'Shorts'], ['/library', 'memory', 'Contenus']] },
   { label: 'SUIVRE', items: [['/memory', 'brain', 'Historique']] },
 ]
 
 const shortcuts: Record<string, string> = {
   a: '/',
+  p: '/patterns',
   s: '/clips',
   c: '/library',
   h: '/memory',

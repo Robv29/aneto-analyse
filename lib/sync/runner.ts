@@ -97,10 +97,15 @@ async function persistClipCandidates(
     }>
 
     const now = new Date().toISOString()
-    const { error: deleteError } = await admin.from('clip_candidates').delete().eq('content_item_id', video.contentItemId)
+    // Seules les propositions sont reconstruites : un short publié ou écarté
+    // garde sa ligne (et son statut) pour ne jamais être reproposé.
+    const { error: deleteError } = await admin.from('clip_candidates')
+      .delete()
+      .eq('content_item_id', video.contentItemId)
+      .eq('status', 'proposed')
     if (deleteError) throw deleteError
     if (!candidates.length) continue
-    const { error: insertError } = await admin.from('clip_candidates').insert(candidates.map((candidate) => ({
+    const { error: insertError } = await admin.from('clip_candidates').upsert(candidates.map((candidate) => ({
       organization_id: organizationId,
       content_item_id: video.contentItemId,
       candidate_key: candidate.id,
@@ -115,7 +120,7 @@ async function persistClipCandidates(
       excerpt: candidate.excerpt,
       reasons: candidate.reasons,
       updated_at: now,
-    })))
+    })), { onConflict: 'content_item_id,candidate_key', ignoreDuplicates: true })
     if (insertError) throw insertError
     persisted += candidates.length
   }

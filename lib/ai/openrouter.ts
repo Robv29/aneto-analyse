@@ -57,7 +57,9 @@ type OpenRouterPayload = {
 
 // Version du protocole d'analyse : l'incrémenter invalide les analyses
 // existantes et permet de relancer l'enrichissement sans toucher aux données.
-export const EDITORIAL_ANALYSIS_VERSION = 5
+// v6 : orientation viralité — un kit complet (titre, texte, hashtags) pour
+// chaque passage transmis, plus aucune élimination.
+export const EDITORIAL_ANALYSIS_VERSION = 6
 
 export function isOpenRouterConfigured() {
   return Boolean(process.env.OPENROUTER_API_KEY)
@@ -86,24 +88,48 @@ async function analyzeOneVideo(video: EditorialVideoInput, benchmark: Record<str
     },
     body: JSON.stringify({
       model: requestedModel,
-      temperature: .2,
-      max_tokens: 1250,
+      temperature: .4,
+      max_tokens: 2200,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content: `Tu es un comité éditorial français : rédaction, montage short-form, audience et fact-checking. Élimine plutôt que flatter. N’invente jamais citation, fait, tendance, émotion, statistique ou timecode. Le corpus est un benchmark interne, pas le marché mondial. Garde au maximum 2 passages autonomes et distincts. Le hook doit rester fidèle au verbatim. Donne un contre-argument et un test mesurable. Les hashtags sont des hypothèses, jamais des tendances. Réponds uniquement en JSON valide.`,
+          content: `Tu es un stratège short-form français, expert de ce qui devient viral sur TikTok, YouTube Shorts et Reels. Ta mission : transformer des passages réellement prononcés en shorts à fort potentiel de partage.
+
+RÈGLES NON NÉGOCIABLES
+- N'invente jamais citation, fait, chiffre, émotion ou timecode : tout part du verbatim fourni.
+- Chaque passage transmis reçoit son kit de publication complet. Aucune élimination.
+- Le titre promet, le passage paie : pas de clickbait que le verbatim ne tient pas.
+
+LEVIERS DE VIRALITÉ À ACTIVER
+- Hook : les 2 premières secondes doivent créer un manque (question ouverte, contradiction, enjeu chiffré, début d'histoire). Jamais de mise en contexte.
+- Émotion dominante unique par short : surprise, indignation, identification ou inspiration.
+- Identification : le spectateur doit penser « c'est exactement moi » ou « je dois l'envoyer à quelqu'un ».
+- Conversation : la caption se termine par une question ou une prise de position clivante qui force le commentaire.
+- Boucle : titre et hook ouvrent une question à laquelle seul le visionnage complet répond.
+
+LIVRABLES PAR PASSAGE
+- title : ≤ 60 caractères, formulé comme un hook (curiosité, enjeu, contradiction), sans emoji.
+- publication_hook : la phrase d'ouverture à afficher à l'écran, fidèle au verbatim.
+- caption : 150 à 400 caractères — 1 phrase choc, 1 à 2 phrases qui montent l'enjeu, puis une question finale qui fait commenter. Emojis sobres autorisés (2 max).
+- hashtags : 5 à 8 — mélange de 2-3 larges à fort volume, 2-3 de niche collés au sujet, 1 de format (#shorts, #podcast…). Sans espaces ni accents.
+- platform_fit : la ou les plateformes où ce passage a le plus de chances, avec les codes de chacune en tête.
+- scorecard : 5 notes entières sur 10 — hook, autonomy (se comprend sans contexte), tension, conversation (fait réagir), fidelity (fidélité au verbatim).
+- rationale : en une phrase, le mécanisme viral de ce passage.
+- risk : en une phrase, ce qui peut faire flopper.
+
+Réponds uniquement en JSON valide.`,
         },
         {
           role: 'user',
-          content: `Vidéo : ${JSON.stringify({ titre: video.title, publication: video.publishedAt, vues: video.views, likes: video.likes, commentaires: video.comments, tags: video.tags.slice(0, 6) })}
-Benchmark global : ${JSON.stringify(benchmark)}
-Passages : ${JSON.stringify(candidatePayload)}
+          content: `Vidéo source : ${JSON.stringify({ titre: video.title, publication: video.publishedAt, vues: video.views, likes: video.likes, commentaires: video.comments, tags: video.tags.slice(0, 6) })}
+Benchmark interne de la chaîne : ${JSON.stringify(benchmark)}
+Passages (verbatim exact + timecodes) : ${JSON.stringify(candidatePayload)}
 
-Compare les passages et conserve 0 à 2 finalistes. Le diagnostic doit être concis. scorecard contient 5 notes entières sur 10. test_hypothesis suit « Si…, alors…, mesuré par… ». caption fait moins de 400 caractères. hashtags contient 4 à 6 éléments.
+Fournis un kit de publication pour CHAQUE passage, classé du plus fort potentiel viral au plus faible. Ajoute une courte lecture stratégique (market_study) de la vidéo : l'opportunité, l'audience à viser, la différenciation, le signal observé dans les chiffres fournis, les limites, le prochain test.
 
 Format obligatoire :
-{"market_study":{"opportunity":"…","audience":"…","differentiation":"…","market_signal":"…","limits":"…","next_test":"…"},"clips":[{"candidate_id":"…","title":"…","publication_hook":"…","rationale":"…","market_angle":"…","target_audience":"…","why_now":"…","risk":"…","test_hypothesis":"…","scorecard":{"hook":0,"autonomy":0,"tension":0,"conversation":0,"fidelity":0},"caption":"…","hashtags":["#…"],"platform_fit":["…"]}]}`,
+{"market_study":{"opportunity":"…","audience":"…","differentiation":"…","market_signal":"…","limits":"…","next_test":"…"},"clips":[{"candidate_id":"…","title":"…","publication_hook":"…","rationale":"…","risk":"…","scorecard":{"hook":0,"autonomy":0,"tension":0,"conversation":0,"fidelity":0},"caption":"…","hashtags":["#…"],"platform_fit":["…"]}]}`,
         },
       ],
     }),
@@ -120,14 +146,16 @@ Format obligatoire :
   const parsed = extractOpenRouterJson(content)
   const clips = validateOpenRouterEditorial(parsed, candidatePayload.map((candidate) => candidate.candidate_id)) as EditorialClip[]
   const marketStudy = validateOpenRouterMarketStudy(parsed) as EditorialMarketStudy | null
-  if (!marketStudy) throw new Error('openrouter_invalid_editorial_response')
-  return { contentItemId: video.contentItemId, clips: clips.slice(0, 2), marketStudy, model: payload.model ?? requestedModel }
+  // Chaque passage doit ressortir avec son kit ; une réponse sans aucun kit
+  // valide est une analyse ratée, à relancer.
+  if (!clips.length) throw new Error('openrouter_invalid_editorial_response')
+  return { contentItemId: video.contentItemId, clips, marketStudy, model: payload.model ?? requestedModel }
 }
 
 export type EditorialVideoAnalysis = {
   contentItemId: string
   clips: EditorialClip[]
-  marketStudy: EditorialMarketStudy
+  marketStudy: EditorialMarketStudy | null
   model: string
 }
 

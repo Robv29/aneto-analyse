@@ -43,14 +43,15 @@ export function ClipCard({ clip, index }: { clip: BoardClip; index: number }) {
         {clip.rationale ? <p className="clip-ai-rationale"><Icon name="spark" size={12} /> {clip.rationale}</p> : null}
         {hasEditorialKit ? (
           <>
-            <div className="clip-market-angle">
-              <small>ANGLE · {clip.targetAudience}</small>
-              <p>{clip.marketAngle}</p>
-              {clip.whyNow ? <em><strong>Pourquoi maintenant :</strong> {clip.whyNow}</em> : null}
+            <div className="clip-caption">
+              <small>TEXTE PRÊT À PUBLIER</small>
+              <p>{clip.caption}</p>
+              <div>{clip.hashtags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+              {clip.platformFit.length ? <em>{clip.platformFit.join(' · ')}</em> : null}
             </div>
             {clip.scorecard ? (
               <div className="clip-scorecard">
-                <small>LECTURE DU COMITÉ IA</small>
+                <small>POTENTIEL VIRAL</small>
                 {scorecardLabels.map(([label, key]) => (
                   <span key={key}>
                     <em>{label}</em>
@@ -60,15 +61,15 @@ export function ClipCard({ clip, index }: { clip: BoardClip; index: number }) {
                 ))}
               </div>
             ) : null}
-            {clip.risk ? <div className="clip-challenge"><small>CONTRE-ARGUMENT</small><p>{clip.risk}</p></div> : null}
+            {clip.marketAngle ? (
+              <div className="clip-market-angle">
+                <small>ANGLE{clip.targetAudience ? ` · ${clip.targetAudience}` : ''}</small>
+                <p>{clip.marketAngle}</p>
+                {clip.whyNow ? <em><strong>Pourquoi maintenant :</strong> {clip.whyNow}</em> : null}
+              </div>
+            ) : null}
+            {clip.risk ? <div className="clip-challenge"><small>CE QUI PEUT FAIRE FLOPPER</small><p>{clip.risk}</p></div> : null}
             {clip.testHypothesis ? <div className="clip-test"><small>TEST À MESURER</small><p>{clip.testHypothesis}</p></div> : null}
-            <div className="clip-caption">
-              <small>TEXTE PRÊT À PUBLIER</small>
-              <p>{clip.caption}</p>
-              <div>{clip.hashtags.map((tag) => <span key={tag}>{tag}</span>)}</div>
-              <small className="hashtag-caveat">Hashtags de découvrabilité à tester · pas une tendance temps réel</small>
-              {clip.platformFit.length ? <em>{clip.platformFit.join(' · ')}</em> : null}
-            </div>
           </>
         ) : null}
         <blockquote>

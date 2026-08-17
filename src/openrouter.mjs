@@ -49,6 +49,9 @@ const score10 = (value) => {
   return Number.isFinite(score) && score >= 0 && score <= 10 ? Math.round(score) : null
 }
 
+// Le kit minimal exigé pour publier : titre, hook, texte, hashtags, scorecard.
+// Le reste (rationale, risque, angle…) est conservé quand le modèle le fournit,
+// mais son absence ne fait plus tomber le kit.
 export function validateOpenRouterEditorial(payload, allowedIds) {
   const clips = Array.isArray(payload?.clips) ? payload.clips : []
   const allowed = new Set(allowedIds)
@@ -73,7 +76,7 @@ export function validateOpenRouterEditorial(payload, allowedIds) {
       conversation: score10(item?.scorecard?.conversation),
       fidelity: score10(item?.scorecard?.fidelity),
     }
-    if (!allowed.has(candidateId) || seen.has(candidateId) || title.length < 5 || publicationHook.length < 8 || rationale.length < 12 || marketAngle.length < 12 || caption.length < 20 || targetAudience.length < 5 || whyNow.length < 12 || risk.length < 12 || testHypothesis.length < 12 || hashtags.length < 3 || Object.values(scorecard).some((score) => score === null)) return []
+    if (!allowed.has(candidateId) || seen.has(candidateId) || title.length < 5 || publicationHook.length < 8 || caption.length < 20 || hashtags.length < 3 || Object.values(scorecard).some((score) => score === null)) return []
     seen.add(candidateId)
     return [{ candidateId, title, publicationHook, rationale, marketAngle, caption, targetAudience, whyNow, risk, testHypothesis, scorecard, hashtags, platformFit, rank: index + 1 }]
   }).slice(0, 4)

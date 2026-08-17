@@ -24,6 +24,39 @@ test('accepts only editorial suggestions attached to real measured candidates', 
   assert.deepEqual(response[0].hashtags, ['#dirigeant', '#PME', '#management'])
 })
 
+test('accepts a minimal viral kit: title, hook, caption, hashtags and scorecard suffice', () => {
+  const response = validateOpenRouterEditorial({ clips: [
+    {
+      candidate_id: 'video-2000',
+      title: 'Il a risqué 160 000 € sur une intuition',
+      publication_hook: 'Cette décision pouvait faire tomber toute l’entreprise.',
+      caption: 'Une décision coûteuse peut être la seule façon de protéger son équipe. Vous auriez signé ? 👇',
+      hashtags: ['#entrepreneur', '#business', '#shorts', '#PME'],
+      scorecard: { hook: 9, autonomy: 8, tension: 9, conversation: 8, fidelity: 9 },
+    },
+  ] }, ['video-2000'])
+
+  assert.equal(response.length, 1)
+  assert.equal(response[0].candidateId, 'video-2000')
+  assert.equal(response[0].rationale, '')
+  assert.deepEqual(response[0].hashtags, ['#entrepreneur', '#business', '#shorts', '#PME'])
+})
+
+test('still rejects a kit without caption or hashtags', () => {
+  const response = validateOpenRouterEditorial({ clips: [
+    {
+      candidate_id: 'video-3000',
+      title: 'Un titre valide pour un short',
+      publication_hook: 'Une phrase d’ouverture valide.',
+      caption: 'Trop court.',
+      hashtags: ['#seul'],
+      scorecard: { hook: 5, autonomy: 5, tension: 5, conversation: 5, fidelity: 5 },
+    },
+  ] }, ['video-3000'])
+
+  assert.equal(response.length, 0)
+})
+
 test('extracts JSON even when a free model wraps it in a markdown fence', () => {
   assert.deepEqual(extractOpenRouterJson('```json\n{"clips":[]}\n```'), { clips: [] })
 })

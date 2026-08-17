@@ -46,17 +46,20 @@ const signalWords = /\b(jamais|erreur|perdu|perdre|failli|problème|secret|véri
 const contrastWords = /\b(mais|pourtant|sauf que|en réalité|contrairement|jusqu['’]à|alors que)\b/i
 const fillerStart = /^(donc|voilà|en fait|du coup|eh bien|alors|bon|bah)\s*[,.:;-]?\s*/i
 
+// Le score doit départager, pas décerner des mentions : la base est basse et
+// les bonus sont proportionnés pour que le total réaliste s'étale sur toute
+// l'échelle au lieu de saturer à 100.
 const editorialScore = (text, duration) => {
   const words = text.trim().split(/\s+/).length
   const signals = text.match(signalWords)?.length ?? 0
-  let score = 38
-  if (/\?/.test(text)) score += 13
-  if (contrastWords.test(text)) score += 12
-  if (/\b(j['’]ai|je suis|je n['’]|on a|nous avons)\b/i.test(text)) score += 10
-  if (/\b\d[\d\s.,%€]*\b/.test(text)) score += 8
-  score += Math.min(15, signals * 5)
-  if (words >= 65 && words <= 145) score += 8
-  if (duration >= 28 && duration <= 55) score += 7
+  let score = 10
+  if (/\?/.test(text)) score += 9
+  if (contrastWords.test(text)) score += 11
+  if (/\b(j['’]ai|je suis|je n['’]|on a|nous avons)\b/i.test(text)) score += 11
+  if (/\b\d[\d\s.,%€]*\b/.test(text)) score += 10
+  score += Math.min(20, signals * 6)
+  if (words >= 65 && words <= 145) score += 9
+  if (duration >= 28 && duration <= 55) score += 8
   return Math.max(0, Math.min(100, score))
 }
 

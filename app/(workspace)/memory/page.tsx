@@ -1,6 +1,6 @@
 import { primaryMetric } from '@/src/analytics.mjs'
 import { getWorkspaceOrDemo } from '@/lib/data/guard'
-import { getDecisions, getLibrary, getMemoryEvents, getSources } from '@/lib/data/loaders'
+import { getDecisions, getLibrary, getMemoryEvents, getPublishedShorts, getSources } from '@/lib/data/loaders'
 import { DemoWelcome } from '../../_components/demo-welcome'
 import { compactNumber, providerLabel } from '../../_components/format'
 
@@ -18,11 +18,12 @@ export default async function MemoryPage() {
   const workspace = await getWorkspaceOrDemo()
   if (!workspace) return <DemoWelcome />
 
-  const [memoryEvents, sources, library, decisions] = await Promise.all([
+  const [memoryEvents, sources, library, decisions, publishedShorts] = await Promise.all([
     getMemoryEvents(workspace),
     getSources(workspace),
     getLibrary(workspace),
     getDecisions(workspace),
+    getPublishedShorts(workspace),
   ])
 
   const persistedEvents: TimelineEvent[] = memoryEvents.map((event) => ({
@@ -63,11 +64,42 @@ export default async function MemoryPage() {
       <section className="memory-summary">
         <p>Aneto se souvient de chaque décision et de ce qui s’est passé ensuite.</p>
         <div>
+          <span>Shorts publiés<strong>{publishedShorts.length}</strong></span>
           <span>Décisions mémorisées<strong>{decisions.length}</strong></span>
           <span>Contenus connus<strong>{library.length}</strong></span>
           <span>Sources actives<strong>{sources.filter((source) => source.state === 'connected').length}</strong></span>
         </div>
       </section>
+
+      {publishedShorts.length ? (
+        <section className="dash-card" style={{ marginTop: 26 }}>
+          <header>
+            <span>CE QUE TES SHORTS ONT DONNÉ</span>
+            <span style={{ color: '#5f635a' }}>Mesuré à chaque synchronisation</span>
+          </header>
+          <div className="dash-list">
+            {publishedShorts.map((short) => (
+              <div key={short.id} className="dash-row">
+                <div className="dash-row-copy">
+                  <strong>{short.clipTitle}</strong>
+                  <small>
+                    publié le {new Date(short.markedAt).toLocaleDateString('fr-FR')}
+                    {short.matched
+                      ? ` · ${compactNumber(short.likes)} likes · ${compactNumber(short.comments)} commentaires`
+                      : short.status === 'not_found'
+                        ? ' · publication non retrouvée sur tes plateformes'
+                        : ' · en attente de la prochaine synchronisation'}
+                  </small>
+                </div>
+                <div className="dash-row-metric">
+                  <b>{short.matched ? compactNumber(short.views) : '—'}</b>
+                  <small>vues</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <section className="timeline">
         <div className="timeline-line"></div>
         {events.length ? events.map((event, index) => (

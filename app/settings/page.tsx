@@ -33,6 +33,8 @@ export default async function SettingsPage({
   const youtubeTranscriptionReady = youtube?.oauthScopes.includes('https://www.googleapis.com/auth/youtube.force-ssl')
   const tiktok = snapshot.sources.find((source) => source.provider === 'tiktok')
   const tiktokReady = snapshot.connectors.find((connector) => connector.key === 'tiktok')?.configured
+  const instagram = snapshot.sources.find((source) => source.provider === 'instagram')
+  const instagramReady = snapshot.connectors.find((connector) => connector.key === 'instagram')?.configured
   const tiktokVideoReady = tiktok?.oauthScopes.includes('video.list')
 
   return (
@@ -151,6 +153,35 @@ export default async function SettingsPage({
             <div>
               <p>Le connecteur est prêt côté Aneto. Il reste à enregistrer la clé et le secret de l’application TikTok dans Vercel.</p>
               <small>URL de redirection à déclarer : https://aneto-analyse.vercel.app/api/oauth/tiktok/callback</small>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {snapshot.mode === 'live' ? (
+        <section className="settings-section connector-control">
+          <div>
+            <span>INSTAGRAM / OAUTH META</span>
+            <h2>{instagram ? 'Compte connecté' : 'Connecter un compte professionnel'}</h2>
+          </div>
+          {instagram ? (
+            <div>
+              <p>Dernière synchronisation : {instagram.lastSyncedAt ? new Date(instagram.lastSyncedAt).toLocaleString('fr-FR') : 'jamais'}</p>
+              <p className="connector-capability is-ready">
+                Publications, Reels et statistiques de portée importés.
+              </p>
+              <Link href="/api/oauth/instagram/start" className="connector-link">Renouveler l’autorisation Instagram</Link>
+              <small>L’autorisation Meta expire au bout de 60 jours : Aneto préviendra quand il faudra la renouveler.</small>
+            </div>
+          ) : instagramReady ? (
+            <div>
+              <p>Connexion officielle Meta. Ton compte Instagram doit être <strong>professionnel</strong> et relié à une Page Facebook.</p>
+              <Link href="/api/oauth/instagram/start" className="connector-link">Connecter mon compte Instagram</Link>
+            </div>
+          ) : (
+            <div>
+              <p>Le connecteur est prêt côté Aneto. Il reste à créer l’application Meta et à enregistrer sa clé et son secret dans Vercel.</p>
+              <small>URL de redirection à déclarer : https://aneto-analyse.vercel.app/api/oauth/instagram/callback</small>
             </div>
           )}
         </section>

@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { analyzePerformancePatterns, isOpenRouterConfigured } from '@/lib/ai/openrouter'
 import { getLibrary } from '@/lib/data/loaders'
 import { computePerformancePatterns } from '@/lib/editorial/patterns'
+import { logError } from '@/lib/observability'
 
 export const maxDuration = 60
 
@@ -29,8 +30,9 @@ export async function POST(request: Request) {
     organization: { id: context.organizationId, name: '', slug: '', role: context.role },
   })
   const patterns = computePerformancePatterns(library)
-  if (patterns.sampleSize < 3) {
-    return NextResponse.json({ error: 'Il faut au moins 3 contenus avec des statistiques pour analyser ce qui marche.' }, { status: 400 })
+  // Même seuil que la page : en dessous, les comparaisons ne valent rien.
+  if (patterns.sampleSize < 12) {
+    return NextResponse.json({ error: `Il faut au moins 12 contenus mesurés pour tirer des conclusions fiables (tu en as ${patterns.sampleSize}).` }, { status: 400 })
   }
 
   try {
@@ -47,6 +49,7 @@ export async function POST(request: Request) {
     revalidatePath('/patterns')
     return NextResponse.json({ ok: true, message: `Lecture mise à jour sur ${patterns.sampleSize} contenus.` })
   } catch (error) {
+    logError('patterns_analysis_failed', error, { organizationId: context.organizationId, sampleSize: patterns.sampleSize })
     const message = error instanceof Error ? error.message.slice(0, 160) : 'openrouter_error'
     return NextResponse.json({ error: `L’analyse n’a pas abouti : ${message}` }, { status: 502 })
   }

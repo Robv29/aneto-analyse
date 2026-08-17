@@ -24,6 +24,24 @@ export default async function ClipsPage() {
   if (!board.clips.length) {
     const hasText = transcriptCount > 0
     const hasConnectedSource = sources.some((source) => source.state === 'connected')
+    // Des passages sont repérés mais attendent leur kit de publication :
+    // c'est un clic d'analyse, pas une synchronisation.
+    if (pendingCount) {
+      return (
+        <div className="page clips-page page-enter">
+          <header className="page-head clips-head">
+            <div><span>SHORTS / DÉRUSHAGE</span><h1>Shorts</h1></div>
+          </header>
+          <section className="clips-empty">
+            <span><Icon name="spark" size={28} /></span>
+            <small>{pendingCount} PASSAGE{pendingCount > 1 ? 'S' : ''} REPÉRÉ{pendingCount > 1 ? 'S' : ''}</small>
+            <h2>Les passages sont prêts. Il manque leur texte de publication.</h2>
+            <p>Lance l’analyse : Aneto écrit le titre, la légende et les hashtags de chaque short. Les vidéos sont traitées une par une pour respecter le quota gratuit.</p>
+          </section>
+          <EnrichClips aiClipCount={0} pendingCount={pendingCount} />
+        </div>
+      )
+    }
     return (
       <div className="page clips-page page-enter">
         <header className="page-head clips-head">
@@ -51,12 +69,11 @@ export default async function ClipsPage() {
     <div className="page clips-page page-enter">
       <header className="page-head clips-head">
         <div><span>SHORTS / DÉRUSHAGE</span><h1>Shorts</h1></div>
-        <div className="clips-counter"><strong>{board.clips.length}</strong><span>cuts<br />à examiner</span></div>
+        <div className="clips-counter"><strong>{board.clips.length}</strong><span>shorts<br />prêts</span></div>
       </header>
       <div className="clips-stats">
         <span><b>{board.publishedThisWeek}</b>/5 publiés cette semaine</span>
-        <span><b>{board.clips.length}</b> proposés</span>
-        <span><b>{board.aiClipCount}</b> avec kit IA</span>
+        <span><b>{board.clips.length}</b> prêts à publier</span>
         {pendingCount ? <span><b>{pendingCount}</b> en attente d’analyse</span> : null}
         <span><b>{timedVideos}</b> vidéo{timedVideos > 1 ? 's' : ''} dérushée{timedVideos > 1 ? 's' : ''}</span>
         {board.publishedCount ? <span><b>{board.publishedCount}</b> publiés au total</span> : null}

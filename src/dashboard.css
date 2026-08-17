@@ -120,3 +120,4 @@ a.dash-row:hover strong{color:var(--lime)}
 
 .pattern-row .dash-row-copy{padding-right:10px}
 .pattern-bar{display:block;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--lime),rgba(216,255,67,.25));width:var(--w,0%);margin-top:7px;min-width:3px}
+.pattern-bar.is-fragile{background:repeating-linear-gradient(90deg,#5f635a 0 4px,transparent 4px 7px)}

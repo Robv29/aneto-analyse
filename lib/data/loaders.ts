@@ -314,11 +314,16 @@ export const getClipBoard = cache(async (workspace: ActiveWorkspace, limit = 60)
     }]
   })
 
-  const topEnriched = clips.find((clip) => clip.aiEnhanced)
-  const topAnalysis = topEnriched ? latestAnalysisByContent.get(topEnriched.contentItemId) : [...latestAnalysisByContent.values()][0]
+  // Décision produit : seuls les shorts disposant de leur kit de publication
+  // (titre, texte, hashtags) sont proposés. Les autres attendent leur analyse
+  // — leur nombre est exposé par getPendingAnalysisCount.
+  const readyClips = clips.filter((clip) => clip.aiEnhanced && clip.caption)
+  const topAnalysis = readyClips.length
+    ? latestAnalysisByContent.get(readyClips[0].contentItemId)
+    : [...latestAnalysisByContent.values()][0]
   return {
-    clips,
-    aiClipCount: clips.filter((clip) => clip.aiEnhanced).length,
+    clips: readyClips,
+    aiClipCount: readyClips.length,
     publishedCount,
     publishedThisWeek,
     marketStudy: topAnalysis?.market_study ?? null,
@@ -375,4 +380,38 @@ export const getPatternInsights = cache(async (workspace: ActiveWorkspace): Prom
     model: data.model,
     createdAt: data.created_at,
   }
+})
+
+export type PublishedShort = {
+  id: string
+  clipTitle: string
+  markedAt: string
+  matched: boolean
+  status: string
+  views: number
+  likes: number
+  comments: number
+}
+
+// Ce que sont devenus les shorts publiés : le retour de la boucle de mesure.
+export const getPublishedShorts = cache(async (workspace: ActiveWorkspace, limit = 20): Promise<PublishedShort[]> => {
+  const { data } = await workspace.supabase
+    .from('short_publications')
+    .select('id, clip_title, marked_at, match_confidence, metrics')
+    .eq('organization_id', workspace.organization.id)
+    .order('marked_at', { ascending: false })
+    .limit(limit)
+  return (data ?? []).map((row) => {
+    const metrics = (row.metrics ?? {}) as Record<string, unknown>
+    return {
+      id: row.id,
+      clipTitle: row.clip_title,
+      markedAt: row.marked_at,
+      matched: row.match_confidence === 'automatic' || row.match_confidence === 'confirmed',
+      status: row.match_confidence,
+      views: Number(metrics.views) || 0,
+      likes: Number(metrics.likes) || 0,
+      comments: Number(metrics.comments) || 0,
+    }
+  })
 })

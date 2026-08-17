@@ -35,6 +35,27 @@ Pour activer le mode connecté : appliquez les migrations `supabase/migrations` 
 - **Ausha** : jeton Public API vérifié puis chiffré en AES-256-GCM (`source_credentials`), synchronisation idempotente et relançable.
 - **YouTube** : OAuth Google (lecture seule), vidéos + statistiques + sous-titres + rétention d'audience.
 - **TikTok** : OAuth TikTok (lecture seule), dernières vidéos publiques et performances.
+- **Instagram** : OAuth Meta (Facebook Login), publications et Reels avec leurs statistiques de portée.
+
+### Configurer Instagram
+
+Instagram n'expose ses données qu'à travers une application Meta. Marche à suivre :
+
+1. Le compte Instagram doit être **professionnel** (Créateur ou Entreprise) et **relié à une Page Facebook**.
+2. Sur [developers.facebook.com](https://developers.facebook.com) : créer une application de type **Entreprise**, puis ajouter les produits **Facebook Login** et **Instagram Graph API**.
+3. Dans Facebook Login → Paramètres, déclarer l'URI de redirection : `<ANETO_APP_URL>/api/oauth/instagram/callback`.
+4. Copier l'identifiant et la clé secrète de l'application dans `INSTAGRAM_CLIENT_ID` et `INSTAGRAM_CLIENT_SECRET` sur Vercel.
+5. Connecter le compte depuis les paramètres d'Aneto.
+
+Tant que l'application Meta reste en mode développement, seuls les comptes déclarés comme testeurs peuvent être connectés — ce qui suffit pour un usage personnel. Le passage en mode production demande une revue par Meta.
+
+L'autorisation Meta expire au bout de 60 jours : Aneto signale l'expiration dans les paramètres et il suffit de reconnecter le compte.
+
+## La boucle de mesure
+
+Quand un short est marqué publié (après la copie de son texte), Aneto ouvre un suivi. À chaque synchronisation, il cherche parmi les nouveaux formats courts celui qui correspond, le rattache, puis remonte ses vues et réactions. Le résultat apparaît dans **Historique → Ce que tes shorts ont donné**, et alimente la page **Patterns**.
+
+Le rattachement est heuristique — Aneto ne connaît pas l'identifiant de la publication, faite hors de l'application. Il retient le format court publié le plus proche du marquage, dans une fenêtre de 21 jours.
 
 La synchronisation nocturne (02:00 UTC, `vercel.json`) nécessite `SUPABASE_SERVICE_ROLE_KEY`, `ANETO_CREDENTIAL_ENCRYPTION_KEY` et `CRON_SECRET`. Elle respecte les réponses `429` et leur délai `Retry-After`, limite les tentatives et conserve les erreurs dans `sync_runs`.
 

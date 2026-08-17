@@ -3,11 +3,14 @@ import { revalidatePath } from 'next/cache'
 import { getAuthenticatedOrganization } from '@/lib/auth/organization'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { EDITORIAL_ANALYSIS_VERSION, enrichEditorialClips, isOpenRouterConfigured } from '@/lib/ai/openrouter'
+import { logError } from '@/lib/observability'
 
 export const maxDuration = 60
 
-const VIDEOS_PER_BATCH = 4
-const CANDIDATES_PER_VIDEO = 4
+// Les analyses sont séquentielles et bornées par un budget temps : on peut
+// présenter plus de vidéos que ce qui sera réellement traité en un lancement.
+const VIDEOS_PER_BATCH = 6
+const CANDIDATES_PER_VIDEO = 6
 
 export async function POST(request: Request) {
   const requestOrigin = request.headers.get('origin')
@@ -93,7 +96,7 @@ export async function POST(request: Request) {
   if (!videos.length) return NextResponse.json({ ok: true, enriched: 0, message: 'Aucun passage minuté ne peut encore être analysé.' })
 
   try {
-    const result = await enrichEditorialClips(videos)
+    const result = await enrichEditorialClips(videos, { budgetMs: 45_000 })
     if (result.analyses.length) {
       const { error: insertError } = await admin.from('ai_analyses').insert(result.analyses.map((analysis) => ({
         organization_id: context.organizationId,
@@ -106,7 +109,8 @@ export async function POST(request: Request) {
       })))
       if (insertError) throw insertError
     }
-    const finalists = result.analyses.reduce((sum, analysis) => sum + analysis.clips.length, 0)
+    const kits = result.analyses.reduce((sum, analysis) => sum + analysis.clips.length, 0)
+    const leftToDo = result.remaining + result.failed
     revalidatePath('/', 'layout')
     return NextResponse.json({
       ok: true,
@@ -114,12 +118,14 @@ export async function POST(request: Request) {
       requestCount: result.requestCount,
       succeeded: result.succeeded,
       failed: result.failed,
-      message: result.failed
-        ? `${result.succeeded}/${result.requestCount} analyses terminées · ${finalists} finaliste${finalists > 1 ? 's' : ''} retenu${finalists > 1 ? 's' : ''}. Les vidéos en échec pourront être relancées.`
-        : `${result.requestCount} analyse${result.requestCount > 1 ? 's' : ''} terminée${result.requestCount > 1 ? 's' : ''} · ${finalists} finaliste${finalists > 1 ? 's' : ''} retenu${finalists > 1 ? 's' : ''}.`,
+      remaining: leftToDo,
+      message: leftToDo
+        ? `${kits} short${kits > 1 ? 's' : ''} prêt${kits > 1 ? 's' : ''} à publier. Il reste ${leftToDo} vidéo${leftToDo > 1 ? 's' : ''} à analyser : reclique pour continuer.`
+        : `${kits} short${kits > 1 ? 's' : ''} prêt${kits > 1 ? 's' : ''} à publier. Toutes les vidéos sont analysées.`,
     })
   } catch (error) {
+    logError('clips_enrich_failed', error, { organizationId: context.organizationId, videos: videos.length })
     const message = error instanceof Error ? error.message.slice(0, 180) : 'openrouter_error'
-    return NextResponse.json({ error: `OpenRouter n’a pas terminé l’analyse : ${message}` }, { status: 502 })
+    return NextResponse.json({ error: `L’analyse n’a pas abouti : ${message}` }, { status: 502 })
   }
 }

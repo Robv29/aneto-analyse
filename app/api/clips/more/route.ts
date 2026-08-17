@@ -5,6 +5,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { EDITORIAL_ANALYSIS_VERSION, enrichEditorialClips, isOpenRouterConfigured } from '@/lib/ai/openrouter'
 import { buildClipCandidates } from '@/src/clips.mjs'
 import { parseDurationSeconds } from '@/src/analytics.mjs'
+import { logError } from '@/lib/observability'
 
 export const maxDuration = 60
 
@@ -81,11 +82,16 @@ export async function POST(request: Request) {
   const excludeRanges = (existing ?? []).map((row) => ({ start: row.start_seconds, end: row.end_seconds }))
   const knownKeys = new Set((existing ?? []).map((row) => row.candidate_key))
 
+  const durationSeconds = parseDurationSeconds({ payload: latestVideo.payload }) as number
+  if (durationSeconds && durationSeconds < 180) {
+    return NextResponse.json({ error: `« ${latestVideo.title} » dure moins de 3 minutes : c'est déjà un format court, il n'y a rien à en extraire.` }, { status: 400 })
+  }
+
   const generated = buildClipCandidates(segments, {
     videoId: latestVideo.external_id,
     limit: NEW_SHORTS_TARGET,
     retentionPoints: Array.isArray(transcript.provenance?.retention_points) ? transcript.provenance.retention_points : [],
-    durationSeconds: parseDurationSeconds({ payload: latestVideo.payload }),
+    durationSeconds,
     excludeRanges,
   }) as GeneratedCandidate[]
   const fresh = generated.filter((candidate) => !knownKeys.has(candidate.id))
@@ -157,6 +163,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     // Les candidats sont enregistrés ; le kit IA pourra être relancé depuis la page.
+    logError('more_shorts_kit_failed', error, { organizationId: context.organizationId, contentItemId: latestVideo.id })
     revalidatePath('/', 'layout')
     const message = error instanceof Error ? error.message.slice(0, 160) : 'openrouter_error'
     return NextResponse.json({

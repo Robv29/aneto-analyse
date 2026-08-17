@@ -7,6 +7,12 @@ import { compactNumber, providerLabel } from '../../_components/format'
 
 export const dynamic = 'force-dynamic'
 
+// En dessous de ce volume, aucune comparaison n'a de valeur : la page reste
+// muette plutôt que de présenter du bruit comme un signal.
+const MIN_SAMPLE_SIZE = 12
+// Une ligne appuyée sur moins de 3 contenus est signalée comme fragile.
+const FRAGILE_COUNT = 3
+
 function PatternList({ title, rows, unit }: { title: string; rows: PatternRow[]; unit: string }) {
   if (!rows.length) return null
   const max = Math.max(...rows.map((row) => row.average), 1)
@@ -18,8 +24,12 @@ function PatternList({ title, rows, unit }: { title: string; rows: PatternRow[];
           <div key={row.label} className="dash-row pattern-row">
             <div className="dash-row-copy">
               <strong>{row.label}</strong>
-              <small>{row.count} contenu{row.count > 1 ? 's' : ''}{row.lift ? ` · ×${row.lift.toLocaleString('fr-FR')} vs médiane` : ''}</small>
-              <i className="pattern-bar" style={{ ['--w' as string]: `${Math.round((row.average / max) * 100)}%` }}></i>
+              <small>
+                {row.count} contenu{row.count > 1 ? 's' : ''}
+                {row.lift ? ` · ×${row.lift.toLocaleString('fr-FR')} vs médiane` : ''}
+                {row.count < FRAGILE_COUNT ? ' · échantillon trop faible' : ''}
+              </small>
+              <i className={`pattern-bar ${row.count < FRAGILE_COUNT ? 'is-fragile' : ''}`} style={{ ['--w' as string]: `${Math.round((row.average / max) * 100)}%` }}></i>
             </div>
             <div className="dash-row-metric">
               <b>{compactNumber(row.average)}</b>
@@ -42,15 +52,19 @@ export default async function PatternsPage() {
   ])
   const patterns = computePerformancePatterns(library)
 
-  if (patterns.sampleSize < 3) {
+  if (patterns.sampleSize < MIN_SAMPLE_SIZE) {
     return (
       <div className="dash page-enter">
         <header className="dash-topbar">
           <h1><small>PATTERNS / CE QUI MARCHE</small>Pas encore assez de données.</h1>
         </header>
         <div className="dash-empty">
-          <strong>Il faut au moins 3 contenus avec des statistiques.</strong>
-          <p>Synchronise tes sources : dès que la bibliothèque est assez fournie, Aneto croise durée, thèmes, hooks, hashtags et plateformes pour te dire ce qui marche le mieux chez toi.</p>
+          <strong>{patterns.sampleSize} contenu{patterns.sampleSize > 1 ? 's' : ''} mesuré{patterns.sampleSize > 1 ? 's' : ''} sur les {MIN_SAMPLE_SIZE} nécessaires.</strong>
+          <p>
+            En dessous de ce seuil, comparer des durées ou des thèmes revient à commenter du hasard.
+            Aneto préfère se taire que t’induire en erreur. Continue à publier et à synchroniser :
+            la page s’activera d’elle-même.
+          </p>
         </div>
       </div>
     )

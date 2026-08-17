@@ -159,14 +159,27 @@ export type EditorialVideoAnalysis = {
   model: string
 }
 
-export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const isRateLimited = (error: unknown) => {
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  return message.includes('429') || message.includes('rate') || message.includes('quota') || message.includes('capacity')
+}
+
+// Le quota gratuit d'OpenRouter refuse les appels simultanés : les vidéos sont
+// donc analysées une par une, avec une pause entre chaque et un réessai sur
+// saturation. On s'arrête avant la limite d'exécution de la plateforme ; les
+// vidéos non traitées restent en attente pour le prochain lancement.
+export async function enrichEditorialClips(videos: EditorialVideoInput[], options: { budgetMs?: number } = {}) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new Error('openrouter_not_configured')
-  const selectedVideos = videos.filter((video) => video.candidates.length).slice(0, 4)
+  const selectedVideos = videos.filter((video) => video.candidates.length)
   if (!selectedVideos.length) {
-    return { analyses: [] as EditorialVideoAnalysis[], requestCount: 0, succeeded: 0, failed: 0 }
+    return { analyses: [] as EditorialVideoAnalysis[], requestCount: 0, succeeded: 0, failed: 0, remaining: 0 }
   }
 
+  const budgetMs = options.budgetMs ?? 45_000
+  const startedAt = Date.now()
   const performances = selectedVideos.map((video) => video.views).filter((value) => value > 0).sort((a, b) => a - b)
   const benchmark = {
     videos_comparees: selectedVideos.length,
@@ -174,18 +187,49 @@ export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
     vues_maximales: Math.max(0, ...performances),
     reactions_totales: selectedVideos.reduce((sum, video) => sum + video.likes + video.comments, 0),
   }
-  const settled = await Promise.allSettled(selectedVideos.map((video) => analyzeOneVideo(video, benchmark, apiKey)))
-  const analyses = settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
-  if (!analyses.length) {
-    const firstFailure = settled.find((result) => result.status === 'rejected')
-    throw firstFailure?.status === 'rejected' ? firstFailure.reason : new Error('openrouter_no_result')
+
+  const analyses: EditorialVideoAnalysis[] = []
+  let attempted = 0
+  let failed = 0
+  let lastError: unknown = null
+
+  for (const [index, video] of selectedVideos.entries()) {
+    // Il faut au moins ~18 s de marge pour tenter une analyse complète.
+    if (Date.now() - startedAt > budgetMs - 18_000) break
+    if (index > 0) await wait(1_200)
+    attempted += 1
+
+    try {
+      analyses.push(await analyzeOneVideo(video, benchmark, apiKey))
+    } catch (error) {
+      lastError = error
+      // Une saturation du quota gratuit se retente une fois, après une pause.
+      if (isRateLimited(error) && Date.now() - startedAt < budgetMs - 25_000) {
+        await wait(4_000)
+        try {
+          analyses.push(await analyzeOneVideo(video, benchmark, apiKey))
+          continue
+        } catch (retryError) {
+          lastError = retryError
+        }
+      }
+      failed += 1
+      console.error(JSON.stringify({
+        event: 'editorial_analysis_failed',
+        contentItemId: video.contentItemId,
+        error: lastError instanceof Error ? lastError.message.slice(0, 200) : 'unknown',
+      }))
+    }
   }
+
+  if (!analyses.length) throw lastError ?? new Error('openrouter_no_result')
 
   return {
     analyses,
-    requestCount: selectedVideos.length,
+    requestCount: attempted,
     succeeded: analyses.length,
-    failed: selectedVideos.length - analyses.length,
+    failed,
+    remaining: selectedVideos.length - attempted,
   }
 }
 

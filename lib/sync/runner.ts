@@ -2,11 +2,14 @@ import 'server-only'
 import { AushaClient } from '@/lib/connectors/ausha'
 import { refreshYouTubeTokens, YouTubeClient, YOUTUBE_CAPTIONS_SCOPE, type YouTubeTokens } from '@/lib/connectors/youtube'
 import { refreshTikTokTokens, TikTokClient, type TikTokTokens } from '@/lib/connectors/tiktok'
+import { InstagramClient, type InstagramTokens } from '@/lib/connectors/instagram'
 import { ConnectorError } from '@/lib/connectors/types'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { decryptCredential, encryptCredential } from '@/src/security/credentials.mjs'
 import { extractTranscriptKeywords, parseDurationSeconds } from '@/src/analytics.mjs'
 import { buildClipCandidates } from '@/src/clips.mjs'
+import { reconcilePublishedShorts } from '@/lib/editorial/publication-loop'
+import { logError } from '@/lib/observability'
 
 type AdminClient = NonNullable<ReturnType<typeof createSupabaseAdminClient>>
 
@@ -19,7 +22,10 @@ type ClaimedRun = {
 
 type TimedSegment = { start: number; end: number; text: string }
 
-const CLIPS_PER_VIDEO = 8
+const CLIPS_PER_VIDEO = 20
+// En dessous de ce seuil, la vidéo est déjà un format court : la dérusher
+// reviendrait à proposer un short tiré d'un short.
+const MIN_SOURCE_DURATION_SECONDS = 180
 
 const safeMessage = (error: unknown) => error instanceof ConnectorError
   ? `${error.code}: ${error.message}`
@@ -77,11 +83,13 @@ async function persistClipCandidates(
 ) {
   let persisted = 0
   for (const video of videos) {
+    const durationSeconds = parseDurationSeconds({ payload: video.payload }) as number
+    if (durationSeconds && durationSeconds < MIN_SOURCE_DURATION_SECONDS) continue
     const candidates = buildClipCandidates(video.segments, {
       videoId: video.externalId,
       limit: CLIPS_PER_VIDEO,
       retentionPoints: video.retentionPoints,
-      durationSeconds: parseDurationSeconds({ payload: video.payload }),
+      durationSeconds,
     }) as Array<{
       id: string
       start: number
@@ -195,7 +203,7 @@ export async function processNextSyncRun(organizationId?: string) {
       authTag: credential.auth_tag,
     }, encryptionKey)
     let items
-    let kind: 'episode' | 'video'
+    let kind: 'episode' | 'video' | 'publication'
     let provenanceEndpoint: string
     let youtubeClient: YouTubeClient | null = null
     let youtubeScopes = ''
@@ -232,6 +240,21 @@ export async function processNextSyncRun(organizationId?: string) {
         updated_at: new Date().toISOString(),
       }).eq('source_id', source.id)
       if (updateCredentialError) throw updateCredentialError
+    } else if (source.provider === 'instagram') {
+      let tokens: InstagramTokens
+      try {
+        tokens = JSON.parse(storedCredential) as InstagramTokens
+      } catch {
+        throw new ConnectorError('Identifiants Instagram illisibles.', 'invalid_credentials')
+      }
+      // Le jeton longue durée expire au bout de 60 jours et ne se renouvelle
+      // pas sans l'utilisateur : mieux vaut un message clair qu'un échec obscur.
+      if (new Date(tokens.expiresAt).getTime() < Date.now()) {
+        throw new ConnectorError('L’autorisation Instagram a expiré. Reconnecte le compte dans les paramètres.', 'unauthorized')
+      }
+      items = await new InstagramClient(tokens.accessToken).listMedia(source.external_account_id)
+      kind = 'publication'
+      provenanceEndpoint = '/{ig-user-id}/media + /insights'
     } else if (source.provider === 'tiktok') {
       let tokens: TikTokTokens
       try {
@@ -383,6 +406,15 @@ export async function processNextSyncRun(organizationId?: string) {
         }))
       }
       clipsPersisted += await backfillMissingClipCandidates(admin, source.organization_id)
+    }
+
+    // Boucle de mesure : les shorts marqués publiés sont rattachés aux
+    // contenus réellement mis en ligne, et leurs performances rafraîchies.
+    try {
+      await reconcilePublishedShorts(admin, source.organization_id)
+    } catch (error) {
+      // Le suivi ne doit jamais faire échouer une synchronisation.
+      logError('publication_loop_failed', error, { organizationId: source.organization_id })
     }
 
     await Promise.all([

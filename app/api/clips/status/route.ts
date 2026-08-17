@@ -56,6 +56,17 @@ export async function POST(request: Request) {
   }
 
   if (status === 'published') {
+    // Ouvre le suivi : Aneto cherchera ce short parmi les prochains contenus
+    // synchronisés pour en mesurer les performances.
+    await admin.from('short_publications').upsert({
+      organization_id: context.organizationId,
+      source_content_item_id: contentItemId,
+      candidate_key: candidateKey,
+      clip_title: updated.title,
+      match_confidence: 'pending',
+      marked_at: now,
+    }, { onConflict: 'source_content_item_id,candidate_key' })
+
     await admin.from('memory_events').insert({
       organization_id: context.organizationId,
       event_type: `Short publié · ${updated.title}`.slice(0, 200),

@@ -13,13 +13,14 @@ const scorecardLabels: Array<[string, keyof NonNullable<BoardClip['scorecard']>]
   ['Fidélité', 'fidelity'],
 ]
 
+// Seuls les shorts disposant de leur kit complet arrivent ici (voir getClipBoard).
 export function ClipCard({ clip, index }: { clip: BoardClip; index: number }) {
   const watchUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(clip.externalId)}&t=${clip.start}s`
-  const hasEditorialKit = clip.aiEnhanced && Boolean(clip.caption)
+  const hasEditorialKit = Boolean(clip.caption)
   const copyText = hasEditorialKit ? buildClipCopyText(clip) as string : ''
 
   return (
-    <article className={`clip-card ${clip.aiEnhanced ? 'is-ai' : ''}`}>
+    <article className="clip-card is-ai">
       <div className="clip-rank">
         <span>{String(index + 1).padStart(2, '0')}</span>
         <strong>{clip.score}</strong>
@@ -34,7 +35,7 @@ export function ClipCard({ clip, index }: { clip: BoardClip; index: number }) {
           : <em>Classement sémantique · rétention à importer</em>}
       </div>
       <div className="clip-proposal">
-        <small>{clip.aiEnhanced ? 'TITRE RECOMMANDÉ' : 'TITRE PROPOSÉ'}</small>
+        <small>TITRE RECOMMANDÉ</small>
         <h2>{clip.title}</h2>
         {clip.rationale ? <p className="clip-ai-rationale"><Icon name="spark" size={12} /> {clip.rationale}</p> : null}
         {hasEditorialKit ? (

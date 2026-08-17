@@ -11,9 +11,13 @@ const cleanHashtag = (value) => {
   return normalized.length > 1 ? `#${normalized}` : ''
 }
 
+// Modèle payant par défaut : le pool gratuit d'OpenRouter est refusé, car sa
+// qualité est aléatoire et les offres gratuites conservent les données envoyées.
+export const DEFAULT_OPENROUTER_MODEL = 'anthropic/claude-haiku-4.5'
+
 export function resolveOpenRouterModel(value) {
   const configured = clean(value, 160)
-  if (!configured || configured.endsWith(':free')) return 'openrouter/free'
+  if (!configured || configured.endsWith(':free') || configured === 'openrouter/free') return DEFAULT_OPENROUTER_MODEL
   return configured
 }
 

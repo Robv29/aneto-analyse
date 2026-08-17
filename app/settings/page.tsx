@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { getWorkspaceSnapshot } from '@/lib/data/workspace'
+import { getConnectorConfiguration } from '@/lib/env'
+import { asActiveWorkspace, getSessionContext } from '@/lib/data/session'
+import { getSources, type WorkspaceSource } from '@/lib/data/loaders'
 import { signOut } from '@/app/login/actions'
 import { connectAusha, enqueueAushaSync, syncTikTokNow, syncYouTubeNow } from './actions'
 
@@ -11,9 +13,19 @@ export default async function SettingsPage({
 }: {
   searchParams: Promise<{ error?: string; success?: string }>
 }) {
-  const snapshot = await getWorkspaceSnapshot()
+  const session = await getSessionContext()
   const feedback = await searchParams
-  if (snapshot.mode === 'live' && !snapshot.viewer) redirect('/login')
+  if (session.mode === 'live' && !session.viewer) redirect('/login')
+  const workspace = asActiveWorkspace(session)
+  const sources: WorkspaceSource[] = workspace ? await getSources(workspace) : []
+  const connectors = getConnectorConfiguration()
+  const snapshot = {
+    mode: session.mode,
+    viewer: session.viewer,
+    organization: session.organization,
+    sources,
+    connectors,
+  }
   const ausha = snapshot.sources.find((source) => source.provider === 'ausha')
   const aushaReady = snapshot.connectors.find((connector) => connector.key === 'ausha')?.configured
   const youtube = snapshot.sources.find((source) => source.provider === 'youtube')
@@ -119,7 +131,7 @@ export default async function SettingsPage({
               <p>Dernière synchronisation : {tiktok.lastSyncedAt ? new Date(tiktok.lastSyncedAt).toLocaleString('fr-FR') : 'jamais'}</p>
               <p className={tiktokVideoReady ? 'connector-capability is-ready' : 'connector-capability'}>
                 {tiktokVideoReady
-                  ? 'Autorisation vérifiée · lecture des 4 dernières vidéos publiques et de leurs performances.'
+                  ? 'Autorisation vérifiée · lecture des dernières vidéos publiques et de leurs performances.'
                   : 'Autorisation incomplète · TikTok n’a pas accordé la permission video.list.'}
               </p>
               {tiktokVideoReady ? (
@@ -132,7 +144,7 @@ export default async function SettingsPage({
             </div>
           ) : tiktokReady ? (
             <div>
-              <p>Connexion officielle TikTok. Aneto récupère uniquement les 4 dernières vidéos publiques, leurs légendes et leurs performances.</p>
+              <p>Connexion officielle TikTok. Aneto récupère uniquement les dernières vidéos publiques, leurs légendes et leurs performances.</p>
               <Link href="/api/oauth/tiktok/start" className="connector-link">Connecter mon compte TikTok</Link>
             </div>
           ) : (

@@ -1,4 +1,4 @@
-import { enqueueDailySyncRuns, processNextSyncRun } from '@/lib/sync/runner'
+import { drainSyncQueue, enqueueDailySyncRuns, purgeFinishedSyncRuns, releaseStaleSyncRuns } from '@/lib/sync/runner'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -9,15 +9,22 @@ export async function GET(request: Request) {
     return Response.json({ error: 'unauthorized' }, { status: 401 })
   }
 
+  const released = await releaseStaleSyncRuns()
   const queue = await enqueueDailySyncRuns()
-  const processed = []
-  for (let index = 0; index < 3; index += 1) {
-    const result = await processNextSyncRun()
-    processed.push(result)
-    if (result.status === 'idle' || result.status === 'not_configured') break
-  }
+  const drain = await drainSyncQueue({ budgetMs: 45_000 })
+  const purge = await purgeFinishedSyncRuns()
 
-  return Response.json({ ok: true, queue, processed }, {
+  return Response.json({
+    ok: true,
+    released: released.released,
+    enqueued: queue.enqueued,
+    processed: drain.processed,
+    succeeded: drain.succeeded,
+    failed: drain.failed,
+    retries: drain.retries,
+    drained: drain.drained,
+    purged: purge.purged,
+  }, {
     headers: { 'Cache-Control': 'no-store' },
   })
 }

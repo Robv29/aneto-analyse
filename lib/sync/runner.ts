@@ -5,7 +5,10 @@ import { refreshTikTokTokens, TikTokClient, type TikTokTokens } from '@/lib/conn
 import { ConnectorError } from '@/lib/connectors/types'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { decryptCredential, encryptCredential } from '@/src/security/credentials.mjs'
-import { extractTranscriptKeywords } from '@/src/analytics.mjs'
+import { extractTranscriptKeywords, parseDurationSeconds } from '@/src/analytics.mjs'
+import { buildClipCandidates } from '@/src/clips.mjs'
+
+type AdminClient = NonNullable<ReturnType<typeof createSupabaseAdminClient>>
 
 type ClaimedRun = {
   id: string
@@ -14,9 +17,29 @@ type ClaimedRun = {
   attempt: number
 }
 
+type TimedSegment = { start: number; end: number; text: string }
+
+const CLIPS_PER_VIDEO = 8
+
 const safeMessage = (error: unknown) => error instanceof ConnectorError
   ? `${error.code}: ${error.message}`
   : error instanceof Error ? error.message.slice(0, 500) : 'unknown_sync_error'
+
+export async function releaseStaleSyncRuns() {
+  const admin = createSupabaseAdminClient()
+  if (!admin) return { released: 0 }
+  const { data, error } = await admin.rpc('release_stale_sync_runs', { stale_minutes: 10 })
+  if (error) throw error
+  return { released: Number(data ?? 0) }
+}
+
+export async function purgeFinishedSyncRuns() {
+  const admin = createSupabaseAdminClient()
+  if (!admin) return { purged: 0 }
+  const { data, error } = await admin.rpc('purge_finished_sync_runs', { keep_days: 30 })
+  if (error) throw error
+  return { purged: Number(data ?? 0) }
+}
 
 export async function enqueueDailySyncRuns() {
   const admin = createSupabaseAdminClient()
@@ -41,12 +64,113 @@ export async function enqueueDailySyncRuns() {
   return { enqueued: data?.length ?? 0 }
 }
 
-export async function processNextSyncRun() {
+async function persistClipCandidates(
+  admin: AdminClient,
+  organizationId: string,
+  videos: Array<{
+    contentItemId: string
+    externalId: string
+    payload: unknown
+    segments: TimedSegment[]
+    retentionPoints: unknown[]
+  }>,
+) {
+  let persisted = 0
+  for (const video of videos) {
+    const candidates = buildClipCandidates(video.segments, {
+      videoId: video.externalId,
+      limit: CLIPS_PER_VIDEO,
+      retentionPoints: video.retentionPoints,
+      durationSeconds: parseDurationSeconds({ payload: video.payload }),
+    }) as Array<{
+      id: string
+      start: number
+      end: number
+      duration: number
+      score: number
+      editorialScore: number
+      retention: unknown
+      title: string
+      hook: string
+      excerpt: string
+      reasons: string[]
+    }>
+
+    const now = new Date().toISOString()
+    const { error: deleteError } = await admin.from('clip_candidates').delete().eq('content_item_id', video.contentItemId)
+    if (deleteError) throw deleteError
+    if (!candidates.length) continue
+    const { error: insertError } = await admin.from('clip_candidates').insert(candidates.map((candidate) => ({
+      organization_id: organizationId,
+      content_item_id: video.contentItemId,
+      candidate_key: candidate.id,
+      start_seconds: candidate.start,
+      end_seconds: candidate.end,
+      duration_seconds: candidate.duration,
+      score: candidate.score,
+      editorial_score: candidate.editorialScore,
+      retention: candidate.retention ?? null,
+      title: candidate.title,
+      hook: candidate.hook,
+      excerpt: candidate.excerpt,
+      reasons: candidate.reasons,
+      updated_at: now,
+    })))
+    if (insertError) throw insertError
+    persisted += candidates.length
+  }
+  return persisted
+}
+
+// Les transcriptions importées avant l'existence de clip_candidates n'ont pas
+// encore d'extraits matérialisés : on en rattrape un lot borné à chaque run.
+async function backfillMissingClipCandidates(admin: AdminClient, organizationId: string, batch = 12) {
+  const { data: transcripts, error } = await admin
+    .from('content_transcripts')
+    .select('content_item_id, provenance')
+    .eq('organization_id', organizationId)
+    .eq('status', 'available')
+  if (error || !transcripts?.length) return 0
+
+  const timed = transcripts.filter((transcript) => Array.isArray(transcript.provenance?.timed_segments) && transcript.provenance.timed_segments.length)
+  if (!timed.length) return 0
+
+  const { data: existing } = await admin
+    .from('clip_candidates')
+    .select('content_item_id')
+    .eq('organization_id', organizationId)
+  const covered = new Set((existing ?? []).map((row) => row.content_item_id))
+  const missing = timed.filter((transcript) => !covered.has(transcript.content_item_id)).slice(0, batch)
+  if (!missing.length) return 0
+
+  const { data: contents } = await admin
+    .from('content_items')
+    .select('id, external_id, payload')
+    .eq('organization_id', organizationId)
+    .in('id', missing.map((transcript) => transcript.content_item_id))
+  const contentById = new Map((contents ?? []).map((content) => [content.id, content]))
+
+  return persistClipCandidates(admin, organizationId, missing.flatMap((transcript) => {
+    const content = contentById.get(transcript.content_item_id)
+    if (!content?.external_id) return []
+    return [{
+      contentItemId: transcript.content_item_id,
+      externalId: content.external_id,
+      payload: content.payload,
+      segments: transcript.provenance.timed_segments as TimedSegment[],
+      retentionPoints: Array.isArray(transcript.provenance?.retention_points) ? transcript.provenance.retention_points : [],
+    }]
+  }))
+}
+
+export async function processNextSyncRun(organizationId?: string) {
   const admin = createSupabaseAdminClient()
   const encryptionKey = process.env.ANETO_CREDENTIAL_ENCRYPTION_KEY
   if (!admin || !encryptionKey) return { status: 'not_configured' as const }
 
-  const { data: claimed, error: claimError } = await admin.rpc('claim_next_sync_run')
+  const { data: claimed, error: claimError } = await admin.rpc('claim_next_sync_run', {
+    target_organization_id: organizationId ?? null,
+  })
   if (claimError) throw claimError
   const run = (claimed?.[0] ?? null) as ClaimedRun | null
   if (!run) return { status: 'idle' as const }
@@ -86,7 +210,12 @@ export async function processNextSyncRun() {
       const refreshed = await refreshYouTubeTokens(tokens)
       youtubeClient = new YouTubeClient(refreshed.accessToken)
       youtubeScopes = refreshed.scope
-      items = await youtubeClient.listVideos(source.external_account_id)
+      const { data: knownItems } = await admin
+        .from('content_items')
+        .select('external_id')
+        .eq('source_id', source.id)
+      const knownExternalIds = new Set((knownItems ?? []).flatMap((item) => item.external_id ? [item.external_id] : []))
+      items = await youtubeClient.listVideos(source.external_account_id, { knownExternalIds })
       kind = 'video'
       provenanceEndpoint = '/youtube/v3/playlistItems + /youtube/v3/videos'
 
@@ -108,7 +237,7 @@ export async function processNextSyncRun() {
       if (!tokens.refreshToken) throw new ConnectorError('Autorisation TikTok incomplète.', 'invalid_credentials')
       const refreshed = await refreshTikTokTokens(tokens)
       const tiktokClient = new TikTokClient(refreshed.accessToken)
-      items = await tiktokClient.listVideos(4)
+      items = await tiktokClient.listVideos()
       kind = 'video'
       provenanceEndpoint = '/v2/video/list/'
 
@@ -155,7 +284,9 @@ export async function processNextSyncRun() {
 
     let transcriptsAvailable = 0
     let transcriptsPending = 0
+    let clipsPersisted = 0
     if (source.provider === 'youtube' && youtubeClient && persistedItems.length) {
+      const payloadByExternalId = new Map(rows.map((row) => [row.external_id, row.payload]))
       const hasCaptionsScope = youtubeScopes.split(/\s+/).includes(YOUTUBE_CAPTIONS_SCOPE)
       const { data: existingTranscripts } = await admin
         .from('content_transcripts')
@@ -230,13 +361,29 @@ export async function processNextSyncRun() {
             transcriptsPending = transcriptRows.filter((row) => row.status !== 'available').length
           }
         }
+
+        const idByContent = new Map(persistedItems.map((item) => [item.id, item.external_id]))
+        clipsPersisted = await persistClipCandidates(admin, source.organization_id, transcriptRows.flatMap((row) => {
+          const segments = Array.isArray(row.provenance?.timed_segments) ? row.provenance.timed_segments as TimedSegment[] : []
+          if (row.status !== 'available' || !segments.length) return []
+          const externalId = idByContent.get(row.content_item_id)
+          if (!externalId) return []
+          return [{
+            contentItemId: row.content_item_id,
+            externalId,
+            payload: payloadByExternalId.get(externalId) ?? {},
+            segments,
+            retentionPoints: Array.isArray(row.provenance?.retention_points) ? row.provenance.retention_points : [],
+          }]
+        }))
       }
+      clipsPersisted += await backfillMissingClipCandidates(admin, source.organization_id)
     }
 
     await Promise.all([
       admin.from('sources').update({ state: 'connected', last_synced_at: syncedAt, updated_at: syncedAt }).eq('id', source.id),
       admin.from('sync_runs').update({
-        status: 'succeeded', finished_at: syncedAt, metrics: { items: rows.length, transcripts_available: transcriptsAvailable, transcripts_pending: transcriptsPending }, error_code: null, error_message: null,
+        status: 'succeeded', finished_at: syncedAt, metrics: { items: rows.length, transcripts_available: transcriptsAvailable, transcripts_pending: transcriptsPending, clips_persisted: clipsPersisted }, error_code: null, error_message: null,
       }).eq('id', run.id),
     ])
     return { status: 'succeeded' as const, runId: run.id, items: rows.length, transcripts: transcriptsAvailable, transcriptsPending }
@@ -269,9 +416,55 @@ export async function processNextSyncRun() {
   }
 }
 
-export async function processSyncRunUntil(targetRunId: string, maxClaims = 12) {
+export type DrainResult = {
+  processed: number
+  succeeded: number
+  failed: number
+  retries: number
+  items: number
+  transcripts: number
+  transcriptsPending: number
+  drained: boolean
+  runResults: Array<Awaited<ReturnType<typeof processNextSyncRun>>>
+}
+
+// Draine la file jusqu'à épuisement ou budget temps atteint. Les runs restants
+// demeurent en file : le cron ou le prochain déclenchement les reprendra.
+export async function drainSyncQueue(options: { organizationId?: string; budgetMs?: number; maxRuns?: number } = {}): Promise<DrainResult> {
+  const budgetMs = options.budgetMs ?? 45_000
+  const maxRuns = options.maxRuns ?? 20
+  const startedAt = Date.now()
+  const result: DrainResult = {
+    processed: 0, succeeded: 0, failed: 0, retries: 0,
+    items: 0, transcripts: 0, transcriptsPending: 0,
+    drained: false, runResults: [],
+  }
+
+  while (result.processed < maxRuns && Date.now() - startedAt < budgetMs) {
+    const run = await processNextSyncRun(options.organizationId)
+    if (run.status === 'idle' || run.status === 'not_configured') {
+      result.drained = true
+      break
+    }
+    result.processed += 1
+    result.runResults.push(run)
+    if (run.status === 'succeeded') {
+      result.succeeded += 1
+      result.items += run.items
+      result.transcripts += run.transcripts
+      result.transcriptsPending += run.transcriptsPending
+    } else if (run.status === 'failed') {
+      result.failed += 1
+    } else if (run.status === 'retry_scheduled') {
+      result.retries += 1
+    }
+  }
+  return result
+}
+
+export async function processSyncRunUntil(targetRunId: string, organizationId?: string, maxClaims = 12) {
   for (let claim = 0; claim < maxClaims; claim += 1) {
-    const result = await processNextSyncRun()
+    const result = await processNextSyncRun(organizationId)
     if ('runId' in result && result.runId === targetRunId) return result
     if (result.status === 'idle' || result.status === 'not_configured') break
   }

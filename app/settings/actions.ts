@@ -123,7 +123,7 @@ export async function syncYouTubeNow(formData: FormData) {
   }).select('id').single()
   if (error || !queuedRun) redirect(settingsUrl('error', 'La synchronisation YouTube n’a pas pu démarrer.'))
 
-  const result = await processSyncRunUntil(queuedRun.id)
+  const result = await processSyncRunUntil(queuedRun.id, context.organizationId)
   revalidatePath('/settings')
   revalidatePath('/')
   if (result.status === 'succeeded') {
@@ -155,7 +155,7 @@ export async function syncTikTokNow(formData: FormData) {
   }).select('id').single()
   if (error || !queuedRun) redirect(settingsUrl('error', 'La synchronisation TikTok n’a pas pu démarrer.'))
 
-  const result = await processSyncRunUntil(queuedRun.id)
+  const result = await processSyncRunUntil(queuedRun.id, context.organizationId)
   revalidatePath('/settings')
   revalidatePath('/')
   if (result.status === 'succeeded') {

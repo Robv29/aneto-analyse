@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { getWorkspaceSnapshot } from '@/lib/data/workspace'
+import { getSessionContext } from '@/lib/data/session'
 import { createOrganization } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -9,10 +9,10 @@ export default async function OnboardingPage({
 }: {
   searchParams: Promise<{ error?: string }>
 }) {
-  const snapshot = await getWorkspaceSnapshot()
+  const session = await getSessionContext()
   const { error } = await searchParams
-  if (snapshot.mode === 'demo' || !snapshot.viewer) redirect('/login')
-  if (snapshot.organization) redirect('/')
+  if (session.mode === 'demo' || !session.viewer) redirect('/login')
+  if (session.organization) redirect('/')
 
   return (
     <main className="auth-page">

@@ -234,23 +234,31 @@ export class YouTubeClient {
     return response.text()
   }
 
-  async listVideos(channelId: string): Promise<NormalizedContentItem[]> {
+  async listVideos(channelId: string, options: { knownExternalIds?: ReadonlySet<string> } = {}): Promise<NormalizedContentItem[]> {
     const channel = await this.request<YouTubeChannelResponse>('/channels?part=id,snippet,contentDetails&mine=true')
     const current = channel.items?.find((item) => item.id === channelId) ?? channel.items?.[0]
     const uploadsId = current?.contentDetails?.relatedPlaylists?.uploads
     if (!current?.id || !uploadsId) throw new ConnectorError('La playlist des vidéos YouTube est introuvable.', 'channel_unavailable')
     if (current.id !== channelId) throw new ConnectorError('La chaîne autorisée ne correspond plus à la source Aneto.', 'channel_mismatch')
 
+    // Synchronisation incrémentale : les 100 vidéos les plus récentes sont
+    // toujours relues (leurs statistiques bougent), au-delà la pagination ne
+    // continue que tant qu'une page contient des vidéos encore inconnues.
+    const known = options.knownExternalIds ?? new Set<string>()
+    const statsRefreshPages = 2
     const ids: string[] = []
     let pageToken: string | undefined
+    let pageIndex = 0
     do {
       const params = new URLSearchParams({ part: 'contentDetails', playlistId: uploadsId, maxResults: '50' })
       if (pageToken) params.set('pageToken', pageToken)
       const page = await this.request<YouTubePlaylistResponse>(`/playlistItems?${params}`)
-      for (const item of page.items ?? []) {
-        if (item.contentDetails?.videoId) ids.push(item.contentDetails.videoId)
-      }
+      const pageIds = (page.items ?? []).flatMap((item) => item.contentDetails?.videoId ? [item.contentDetails.videoId] : [])
+      ids.push(...pageIds)
+      pageIndex += 1
+      const hasUnknown = pageIds.some((id) => !known.has(id))
       pageToken = page.nextPageToken
+      if (pageIndex >= statsRefreshPages && !hasUnknown) break
     } while (pageToken && ids.length < 500)
 
     const observedAt = new Date().toISOString()

@@ -163,13 +163,24 @@ export class TikTokClient {
     }
   }
 
-  async listVideos(maxCount = 4): Promise<NormalizedContentItem[]> {
+  async listVideos(maxCount = 60): Promise<NormalizedContentItem[]> {
     const fields = 'id,create_time,cover_image_url,share_url,video_description,duration,title,like_count,comment_count,share_count,view_count'
-    const payload = await this.request<{ data?: { videos?: unknown[] } }>(`/video/list/?fields=${fields}`, {
-      method: 'POST',
-      body: JSON.stringify({ max_count: Math.max(1, Math.min(20, maxCount)) }),
-    })
     const observedAt = new Date().toISOString()
-    return (payload.data?.videos ?? []).slice(0, maxCount).map((video) => normalizeTikTokVideo(video, observedAt) as NormalizedContentItem)
+    const videos: unknown[] = []
+    let cursor: number | undefined
+    let hasMore = true
+    while (hasMore && videos.length < maxCount) {
+      const payload = await this.request<{ data?: { videos?: unknown[]; cursor?: number; has_more?: boolean } }>(`/video/list/?fields=${fields}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          max_count: Math.max(1, Math.min(20, maxCount - videos.length)),
+          ...(cursor ? { cursor } : {}),
+        }),
+      })
+      videos.push(...(payload.data?.videos ?? []))
+      cursor = payload.data?.cursor
+      hasMore = Boolean(payload.data?.has_more && cursor)
+    }
+    return videos.slice(0, maxCount).map((video) => normalizeTikTokVideo(video, observedAt) as NormalizedContentItem)
   }
 }

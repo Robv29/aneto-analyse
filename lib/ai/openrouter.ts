@@ -55,11 +55,16 @@ type OpenRouterPayload = {
   error?: { message?: string }
 }
 
+// Version du protocole d'analyse : l'incrémenter invalide les analyses
+// existantes et permet de relancer l'enrichissement sans toucher aux données.
+export const EDITORIAL_ANALYSIS_VERSION = 5
+
 export function isOpenRouterConfigured() {
   return Boolean(process.env.OPENROUTER_API_KEY)
 }
 
-const clipAverage = (clip: EditorialClip) => Object.values(clip.scorecard).reduce((sum, score) => sum + score, 0) / 5
+export const clipScorecardAverage = (clip: Pick<EditorialClip, 'scorecard'>) =>
+  Object.values(clip.scorecard).reduce((sum, score) => sum + score, 0) / 5
 
 async function analyzeOneVideo(video: EditorialVideoInput, benchmark: Record<string, number>, apiKey: string) {
   const candidatePayload = video.candidates.slice(0, 4).map((candidate) => ({
@@ -119,11 +124,20 @@ Format obligatoire :
   return { contentItemId: video.contentItemId, clips: clips.slice(0, 2), marketStudy, model: payload.model ?? requestedModel }
 }
 
+export type EditorialVideoAnalysis = {
+  contentItemId: string
+  clips: EditorialClip[]
+  marketStudy: EditorialMarketStudy
+  model: string
+}
+
 export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new Error('openrouter_not_configured')
   const selectedVideos = videos.filter((video) => video.candidates.length).slice(0, 4)
-  if (!selectedVideos.length) return { clips: [] as EditorialClip[], marketStudy: null as EditorialMarketStudy | null, model: null, requestCount: 0, succeeded: 0, failed: 0, analyzedVideoIds: [] as string[] }
+  if (!selectedVideos.length) {
+    return { analyses: [] as EditorialVideoAnalysis[], requestCount: 0, succeeded: 0, failed: 0 }
+  }
 
   const performances = selectedVideos.map((video) => video.views).filter((value) => value > 0).sort((a, b) => a - b)
   const benchmark = {
@@ -133,25 +147,16 @@ export async function enrichEditorialClips(videos: EditorialVideoInput[]) {
     reactions_totales: selectedVideos.reduce((sum, video) => sum + video.likes + video.comments, 0),
   }
   const settled = await Promise.allSettled(selectedVideos.map((video) => analyzeOneVideo(video, benchmark, apiKey)))
-  const successes = settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
-  if (!successes.length) {
+  const analyses = settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+  if (!analyses.length) {
     const firstFailure = settled.find((result) => result.status === 'rejected')
     throw firstFailure?.status === 'rejected' ? firstFailure.reason : new Error('openrouter_no_result')
   }
 
-  const measuredScores = new Map(selectedVideos.flatMap((video) => video.candidates.map((candidate) => [candidate.id, candidate.score])))
-  const clips = successes.flatMap((result) => result.clips)
-    .sort((a, b) => (clipAverage(b) * .7 + (measuredScores.get(b.candidateId) ?? 0) / 10 * .3) - (clipAverage(a) * .7 + (measuredScores.get(a.candidateId) ?? 0) / 10 * .3))
-    .slice(0, 4)
-    .map((clip, index) => ({ ...clip, rank: index + 1 }))
-  const winningStudy = successes.find((result) => result.clips.some((clip) => clip.candidateId === clips[0]?.candidateId))?.marketStudy ?? successes[0].marketStudy
   return {
-    clips,
-    marketStudy: winningStudy,
-    model: [...new Set(successes.map((result) => result.model))].join(', '),
+    analyses,
     requestCount: selectedVideos.length,
-    succeeded: successes.length,
-    failed: selectedVideos.length - successes.length,
-    analyzedVideoIds: successes.map((result) => result.contentItemId),
+    succeeded: analyses.length,
+    failed: selectedVideos.length - analyses.length,
   }
 }
